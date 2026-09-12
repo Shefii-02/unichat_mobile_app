@@ -16,12 +16,16 @@ class PermissionGuard {
     _role = '';
   }
 
-  static bool can(String permission) => _permissions.contains(permission);
+  static bool can(String permission) =>
+      isOwner || _permissions.contains(permission);
   static bool canView(String section) => can('$section.view') || isAdmin;
   static bool canManage(String section) => can('$section.manage') || isAdmin;
 
-  static bool get isAdmin   => _role == 'admin';
-  static bool get isManager => _role == 'manager' || isAdmin;
+  /// Owner / superadmin bypass every permission check, mirroring the web app.
+  static bool get isOwner =>
+      _role == 'owner' || _role == 'superadmin' || _role == 'super_admin';
+  static bool get isAdmin   => isOwner || _role == 'admin';
+  static bool get isManager => _role == 'manager' || _role == 'team_lead' || isAdmin;
   static String get role    => _role;
 
   static List<String> get all => _permissions;

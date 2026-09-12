@@ -1,4 +1,4 @@
-package com.example.unichat_mobile_app
+package com.univexa.flowexa
 
 import io.flutter.embedding.android.FlutterActivity
 

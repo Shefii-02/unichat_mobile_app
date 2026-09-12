@@ -4,10 +4,20 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Flowexa uses the camera to scan the QR code that links this device to your account, and to attach photos to chats.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Flowexa needs access to your photos so you can send images and videos in chats and campaigns.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Flowexa saves media you receive in chats to your photo library.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Flowexa needs the microphone to record voice notes and video attachments.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Flowexa uses Face ID to unlock the app and protect sensitive customer data.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Unichat Mobile App</string>
+	<string>Flowexa</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +25,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>unichat_mobile_app</string>
+	<string>Flowexa</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

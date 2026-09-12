@@ -41,4 +41,8 @@ class LocalStorage {
   static const kUser      = 'current_user';
   static const kBiometric = 'biometric_enabled';
   static const kBioSensitive = 'biometric_sensitive';
+  static const kOnboardingSeen = 'onboarding_seen';
+  static const kDeviceUid = 'device_uid';
+  static const kDeviceName = 'device_name';
+  static const kPushToken = 'push_token';
 }

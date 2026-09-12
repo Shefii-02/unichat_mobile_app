@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:unichat_mobile_app/core/constants/app_colors.dart';
+import 'package:unichat_mobile_app/core/storage/local_storage.dart';
+import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
@@ -10,16 +11,42 @@ class SplashPage extends ConsumerStatefulWidget {
   ConsumerState<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends ConsumerState<SplashPage> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scale;
+class _SplashPageState extends ConsumerState<SplashPage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+  late final Animation<double> _fade;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1100));
+    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
+    _fade = CurvedAnimation(parent: _ctrl, curve: const Interval(0.3, 1));
     _ctrl.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+  }
+
+  Future<void> _boot() async {
+    // Let the intro animation breathe.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (!mounted) return;
+
+    final auth = ref.read(authProvider);
+    final loggedIn = auth.value != null;
+
+    if (loggedIn) {
+      // Confirm the linked device is still authorised before entering.
+      final ok = await ref.read(authProvider.notifier).verifyDevice();
+      if (!mounted) return;
+      context.go(ok ? '/home' : '/auth');
+      return;
+    }
+
+    final seenOnboarding =
+        LocalStorage.getBool(LocalStorage.kOnboardingSeen, defaultValue: false);
+    context.go(seenOnboarding ? '/auth' : '/onboarding');
   }
 
   @override
@@ -30,47 +57,50 @@ class _SplashPageState extends ConsumerState<SplashPage> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<dynamic>>(authProvider, (_, next) {
-      if (next.isLoading) return;
-      if (next.value != null) {
-        context.go('/dashboard');
-      } else {
-        context.go('/login');
-      }
-    });
-
     return Scaffold(
-      backgroundColor: AppColors.primaryDark,
+      backgroundColor: AppPalette.accent,
       body: Center(
-        child: ScaleTransition(
-          scale: _scale,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ScaleTransition(
+              scale: _scale,
+              child: Container(
+                width: 104,
+                height: 104,
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(28),
                 ),
-                child: const Icon(Icons.chat_bubble_rounded, color: AppColors.primary, size: 56),
+                child: const Icon(Icons.bolt_rounded,
+                    color: AppPalette.accent, size: 60),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'UniChat',
-                style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: 1),
+            ),
+            const SizedBox(height: 22),
+            FadeTransition(
+              opacity: _fade,
+              child: const Column(
+                children: [
+                  Text('Flowexa',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5)),
+                  SizedBox(height: 6),
+                  Text('WhatsApp Business, on autopilot',
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
+                ],
               ),
-              const SizedBox(height: 8),
-              const Text('WhatsApp Business CRM', style: TextStyle(color: Colors.white70, fontSize: 15)),
-              const SizedBox(height: 48),
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(color: AppColors.primaryLight, strokeWidth: 2.5),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 46),
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                  color: Colors.white, strokeWidth: 2.4),
+            ),
+          ],
         ),
       ),
     );

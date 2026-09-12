@@ -6,7 +6,6 @@ class SecureStorageService {
   );
 
   static const _tokenKey    = 'auth_token';
-  static const _userIdKey   = 'user_id';
   static const _phoneKey    = 'saved_phone';
   static const _passwordKey = 'saved_password';
   static const _orgIdKey    = 'saved_org_id';

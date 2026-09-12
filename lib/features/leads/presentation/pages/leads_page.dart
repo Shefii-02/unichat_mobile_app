@@ -6,6 +6,7 @@ import 'package:unichat_mobile_app/core/utils/format_utils.dart';
 import 'package:unichat_mobile_app/core/widgets/app_avatar.dart';
 import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
 import 'package:unichat_mobile_app/core/widgets/lead_score_badge.dart';
+import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 class LeadsPage extends StatefulWidget {
   const LeadsPage({super.key});
@@ -46,14 +47,83 @@ class _LeadsPageState extends State<LeadsPage> {
     }
   }
 
+  Future<void> _createLead() async {
+    List<Map<String, dynamic>> contacts;
+    try {
+      contacts = await Api.list('/contacts', query: {'per_page': 100});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+      }
+      return;
+    }
+    if (!mounted || contacts.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Add a contact first.')));
+      }
+      return;
+    }
+    List<Map<String, dynamic>> staff;
+    try {
+      staff = await Api.list('/staff');
+    } catch (_) {
+      staff = const [];
+    }
+    if (!mounted) return;
+    final data = <String, dynamic>{};
+    final ok = await showFormSheet(
+      context,
+      title: 'New lead',
+      submitLabel: 'Create',
+      fields: (ctx) => [
+        FSelect<Map<String, dynamic>>(
+          label: 'Contact',
+          options: contacts,
+          labelOf: (c) => '${c['name'] ?? c['phone']} · ${c['phone'] ?? ''}',
+          onSaved: (c) => data['contact_id'] = c?['id'],
+        ),
+        FSelect<String>(
+          label: 'Priority',
+          options: const ['low', 'medium', 'high'],
+          initial: 'medium',
+          onSaved: (v) => data['priority'] = v ?? 'medium',
+        ),
+        FText(
+          label: 'Category',
+          onSaved: (v) => v.isEmpty ? null : data['category'] = v,
+        ),
+        if (staff.isNotEmpty)
+          FSelect<Map<String, dynamic>>(
+            label: 'Assign to (optional)',
+            options: staff,
+            labelOf: (s) => '${s['name']}',
+            onSaved: (s) => s?['id'] != null ? data['assigned_to'] = s!['id'] : null,
+          ),
+        FText(
+          label: 'Notes',
+          maxLines: 3,
+          onSaved: (v) => v.isEmpty ? null : data['notes'] = v,
+        ),
+      ],
+      onSubmit: () => Api.post('/leads', data: data),
+    );
+    if (ok) _load(reset: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createLead,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New lead'),
+      ),
       appBar: AppBar(
         title: const Text('Leads'),
         actions: [
-          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: _createLead),
           IconButton(icon: const Icon(Icons.notifications_outlined), onPressed: () => context.push('/notifications')),
         ],
       ),

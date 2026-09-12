@@ -6,6 +6,7 @@ import 'package:unichat_mobile_app/core/utils/format_utils.dart';
 import 'package:unichat_mobile_app/core/widgets/app_avatar.dart';
 import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
 import 'package:unichat_mobile_app/core/widgets/lead_score_badge.dart';
+import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 class ContactsPage extends StatefulWidget {
   const ContactsPage({super.key});
@@ -46,13 +47,49 @@ class _ContactsPageState extends State<ContactsPage> {
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
 
+  Future<void> _createContact() async {
+    final data = <String, dynamic>{};
+    final ok = await showFormSheet(
+      context,
+      title: 'New contact',
+      submitLabel: 'Create',
+      fields: (ctx) => [
+        FText(
+          label: 'Phone',
+          required: true,
+          keyboardType: TextInputType.phone,
+          hint: 'With country code',
+          onSaved: (v) => data['phone'] = v,
+        ),
+        FText(label: 'Name', onSaved: (v) => v.isEmpty ? null : data['name'] = v),
+        FText(
+          label: 'Email',
+          keyboardType: TextInputType.emailAddress,
+          onSaved: (v) => v.isEmpty ? null : data['email'] = v,
+        ),
+        FBoolField(
+          label: 'Opted in to messaging',
+          initial: true,
+          onSaved: (v) => data['opted_in'] = v,
+        ),
+      ],
+      onSubmit: () => Api.post('/contacts', data: data),
+    );
+    if (ok) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createContact,
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const Text('New contact'),
+      ),
       appBar: AppBar(
         title: const Text('Contacts'),
         actions: [
-          IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: _createContact),
           IconButton(icon: const Icon(Icons.notifications_outlined), onPressed: () => context.push('/notifications')),
         ],
       ),

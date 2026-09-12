@@ -45,7 +45,7 @@ class WhatsAppBubble extends StatelessWidget {
             bottomLeft: Radius.circular(isSent ? 12 : 0),
             bottomRight: Radius.circular(isSent ? 0 : 12),
           ),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3, offset: const Offset(0, 1))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 3, offset: const Offset(0, 1))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,

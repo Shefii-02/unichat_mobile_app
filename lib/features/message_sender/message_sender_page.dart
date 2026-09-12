@@ -13,7 +13,7 @@ class _MessageSenderPageState extends State<MessageSenderPage> with SingleTicker
   late TabController _tabs;
   final _msgCtrl = TextEditingController();
   List<dynamic> _contacts = [];
-  List<int> _selected = [];
+  final List<int> _selected = [];
   bool _sending = false;
   double _progress = 0;
 

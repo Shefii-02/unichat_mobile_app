@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:unichat_mobile_app/core/network/dio_client.dart';
 
 // ── Search / filter state ─────────────────────────────────────────────────────

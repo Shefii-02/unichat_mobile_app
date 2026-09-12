@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:badges/badges.dart' as bdg;
-import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 
 class MainShell extends StatelessWidget {
   const MainShell({super.key, required this.child});
   final Widget child;
 
   static const _tabs = [
-    _Tab('/chats',     Icons.chat_bubble_outline_rounded,  Icons.chat_bubble_rounded,  'Chats'),
-    _Tab('/leads',     Icons.people_outline_rounded,        Icons.people_rounded,        'Leads'),
-    _Tab('/dashboard', Icons.grid_view_rounded,             Icons.grid_view_rounded,     'Dashboard'),
-    _Tab('/contacts',  Icons.contacts_outlined,             Icons.contacts_rounded,      'Contacts'),
-    _Tab('/more',      Icons.more_horiz_rounded,            Icons.more_horiz_rounded,    'More'),
+    _Tab('/home', Icons.home_outlined, Icons.home_rounded, 'Home'),
+    _Tab('/chats', Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded,
+        'Chats'),
+    _Tab('/leads', Icons.trending_up_outlined, Icons.trending_up_rounded,
+        'Leads'),
+    _Tab('/contacts', Icons.contacts_outlined, Icons.contacts_rounded,
+        'Contacts'),
+    _Tab('/more', Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
   ];
 
   int _tabIndex(String location) {
     for (int i = 0; i < _tabs.length; i++) {
       if (location.startsWith(_tabs[i].route)) return i;
     }
-    return 2;
+    return 0;
   }
 
   @override

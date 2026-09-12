@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Flowexa uses the camera to scan the QR code that links this device to your account.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Flowexa needs the microphone to record voice notes and video attachments.</string>
 </dict>
 </plist>

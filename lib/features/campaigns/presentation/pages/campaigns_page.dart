@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/network/dio_client.dart';
-import 'package:unichat_mobile_app/core/utils/format_utils.dart';
 import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
 
 class CampaignsPage extends StatefulWidget {
