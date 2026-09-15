@@ -104,14 +104,16 @@ class ProfilePage extends ConsumerWidget {
               _MenuGroup(
                 label: 'Account',
                 items: [
-                  _MenuItem(Icons.person_outline_rounded, 'Personal details', onTap: () => context.push('/settings')),
+                  _MenuItem(Icons.person_outline_rounded, 'Personal details', onTap: () => context.push('/edit-profile')),
                   _MenuItem(Icons.folder_outlined, 'Documents', onTap: () => _comingSoon(context)),
                   _MenuItem(Icons.event_available_outlined, 'Leave', onTap: () => context.push('/hr')),
+                  _MenuItem(Icons.devices_rounded, 'Linked devices', onTap: () => context.push('/devices')),
                 ],
               ),
               _MenuGroup(
                 label: 'Preferences',
                 items: [
+                  _MenuItem(Icons.settings_outlined, 'Settings', onTap: () => context.push('/settings')),
                   _MenuItem(Icons.notifications_none_rounded, 'Notifications', onTap: () => context.push('/notifications')),
                   _MenuItem(Icons.headset_mic_outlined, 'Help and support', onTap: () => _comingSoon(context)),
                   _MenuItem(Icons.logout_rounded, 'Log out', danger: true,

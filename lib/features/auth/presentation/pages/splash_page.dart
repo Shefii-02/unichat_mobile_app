@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/storage/local_storage.dart';
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
+import 'package:unichat_mobile_app/core/version/update_checker.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
@@ -29,6 +31,11 @@ class _SplashPageState extends ConsumerState<SplashPage>
   }
 
   Future<void> _boot() async {
+    // Fire-and-forget: a store lookup, so don't let it delay app entry. Shows its "update
+    // available" alert here if it resolves before we've navigated away; otherwise the
+    // manual "Check for update" action in Settings covers it.
+    unawaited(UpdateChecker.checkAndAlertIfNeeded(context));
+
     // Let the intro animation breathe.
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;

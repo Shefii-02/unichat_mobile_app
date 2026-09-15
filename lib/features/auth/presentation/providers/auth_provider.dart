@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:unichat_mobile_app/features/app_lock/app_lock_provider.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
 import 'package:unichat_mobile_app/features/auth/data/auth_repository.dart';
 import 'package:unichat_mobile_app/features/auth/data/device_auth_repository.dart';
@@ -24,11 +25,15 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     state = await AsyncValue.guard(
       () => ref.read(authRepositoryProvider).login(email: email, password: password),
     );
+    if (state.hasValue && state.value != null) {
+      ref.read(appLockProvider.notifier).requireUnlockAfterLogin();
+    }
   }
 
   /// Called by the device-login flow once `claim` has persisted the session.
   void adopt(UserModel user) {
     state = AsyncData(user);
+    ref.read(appLockProvider.notifier).requireUnlockAfterLogin();
   }
 
   /// Re-validate the cached session against `/device-auth/status`. Returns

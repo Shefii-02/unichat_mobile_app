@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/nav/app_modules.dart';
+import 'package:unichat_mobile_app/core/router/shell_routes.dart';
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 
 /// The full app catalogue — search, one-tap shortcuts and every module tile,
@@ -115,7 +116,7 @@ class _QuickActions extends StatelessWidget {
           return Expanded(
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () => context.push(a.$3),
+              onTap: () => context.goToRoute(a.$3),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Column(
@@ -156,7 +157,7 @@ class _ModuleTile extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => context.push(module.route),
+      onTap: () => context.goToRoute(module.route),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Column(

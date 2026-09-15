@@ -81,6 +81,10 @@ final payrollMeProvider =
 });
 final payrollHistoryProvider =
     FutureProvider((ref) => Api.list('/hr/payroll/me/history'));
+
+// ── Notification preferences (self-service) ───────────────────────────────
+final notificationPreferencesProvider =
+    FutureProvider((ref) => Api.one('/notification-preferences/me'));
 final hrLeaveProvider =
     FutureProvider((ref) => Api.list('/hr/leave'));
 // Today's team attendance — only resolves for users with hr.manage /

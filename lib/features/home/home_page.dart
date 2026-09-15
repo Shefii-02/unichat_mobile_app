@@ -253,29 +253,31 @@ class _PersonalStatsStrip extends ConsumerWidget {
           ('Rank of ${rank['total_staff'] ?? 0}', rankLabel, tintLavender),
         ];
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-          child: Row(
-            children: chips
-                .map((c) => Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(right: c == chips.last ? 0 : 8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                          decoration: BoxDecoration(color: c.$3.$1, borderRadius: BorderRadius.circular(12)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(c.$2, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: c.$3.$2)),
-                              Text(c.$1,
-                                  style: TextStyle(fontSize: 10, color: c.$3.$3),
-                                  overflow: TextOverflow.ellipsis),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ))
-                .toList(),
+        return SizedBox(
+          height: 74,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            itemCount: chips.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) {
+              final c = chips[i];
+              return Container(
+                width: 84,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                decoration: BoxDecoration(color: c.$3.$1, borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(c.$2, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: c.$3.$2)),
+                    Text(c.$1,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 10, color: c.$3.$3),
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              );
+            },
           ),
         );
       },
@@ -381,31 +383,30 @@ class _PipelineSection extends ConsumerWidget {
             children: [
               SectionHeader('Pipeline',
                   action: TextButton(
-                      onPressed: () => context.push('/leads'),
+                      onPressed: () => context.go('/leads'),
                       child: const Text('View all'))),
-              Row(
-                children: stages
-                    .map((s) => Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(right: s == stages.last ? 0 : 8),
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: s.$3.$1,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('${s.$2}',
-                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: s.$3.$2)),
-                                  Text(s.$1, style: TextStyle(color: s.$3.$3, fontSize: 10)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ))
-                    .toList(),
+              SizedBox(
+                height: 62,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: stages.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) {
+                    final s = stages[i];
+                    return Container(
+                      width: 96,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: s.$3.$1, borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${s.$2}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: s.$3.$2)),
+                          Text(s.$1, style: TextStyle(color: s.$3.$3, fontSize: 10)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -463,7 +464,7 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
             children: [
               SectionHeader('Follow-ups',
                   action: TextButton(
-                      onPressed: () => context.push('/leads'),
+                      onPressed: () => context.go('/leads'),
                       child: const Text('View all'))),
               Row(
                 children: [

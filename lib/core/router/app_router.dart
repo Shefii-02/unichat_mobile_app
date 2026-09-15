@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/nav/app_modules.dart';
 import 'package:unichat_mobile_app/core/widgets/stub_page.dart';
+import 'package:unichat_mobile_app/features/app_lock/app_lock_page.dart';
+import 'package:unichat_mobile_app/features/app_lock/app_lock_provider.dart';
+import 'package:unichat_mobile_app/features/app_lock/change_mpin_page.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
 import 'package:unichat_mobile_app/features/attendance/clock_in_required_page.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
@@ -32,17 +35,32 @@ import 'package:unichat_mobile_app/features/target/target_page.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_page.dart';
 import 'package:unichat_mobile_app/features/payroll/payroll_page.dart';
 import 'package:unichat_mobile_app/features/profile/profile_page.dart';
+import 'package:unichat_mobile_app/features/profile/edit_profile_page.dart';
 import 'shell/main_shell.dart';
 
-/// Bridges Riverpod auth + attendance-gate state into a GoRouter-compatible
-/// Listenable, so a redirect fires the instant either changes (e.g. once the
-/// attendance fetch kicked off inside `redirect` resolves).
-class _AuthRouterNotifier extends ChangeNotifier {
-  _AuthRouterNotifier(Ref ref) {
-    ref.listen<AsyncValue<dynamic>>(authProvider, (_, __) => notifyListeners());
-    ref.listen<AttendanceGateState>(
+/// Bridges Riverpod auth + attendance-gate + app-lock state into a GoRouter-compatible
+/// Listenable, so a redirect fires the instant any of them changes (e.g. once the
+/// attendance fetch kicked off inside `redirect` resolves) — and observes app lifecycle to
+/// re-lock (see AppLockNotifier.lock) whenever the app is backgrounded.
+class _AuthRouterNotifier extends ChangeNotifier with WidgetsBindingObserver {
+  _AuthRouterNotifier(this._ref) {
+    _ref.listen<AsyncValue<dynamic>>(authProvider, (_, __) => notifyListeners());
+    _ref.listen<AttendanceGateState>(
         attendanceGateProvider, (_, __) => notifyListeners());
+    _ref.listen<AppLockState>(appLockProvider, (_, __) => notifyListeners());
+    WidgetsBinding.instance.addObserver(this);
   }
+
+  final Ref _ref;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      _ref.read(appLockProvider.notifier).lock();
+    }
+  }
+
+  void disposeObserver() => WidgetsBinding.instance.removeObserver(this);
 }
 
 const _publicRoutes = {'/splash', '/onboarding', '/auth', '/login'};
@@ -51,6 +69,11 @@ const _publicRoutes = {'/splash', '/onboarding', '/auth', '/login'};
 /// touching any other screen (including a deep link from a push
 /// notification). This is the only route exempt from that gate.
 const _gateExemptRoute = '/clock-in-required';
+
+/// Route for the app-lock screen (PIN/biometric unlock or first-time setup) — exempt from
+/// both the app-lock check itself (obviously) and the attendance gate, which must never be
+/// reachable before the app is unlocked.
+const _appLockRoute = '/app-lock';
 
 /// Routes that already have a bespoke mobile screen. Everything else in the
 /// module catalogue falls back to [ModuleHubPage].
@@ -114,7 +137,10 @@ Widget _pageForModuleRoute(String route) {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = _AuthRouterNotifier(ref);
-  ref.onDispose(notifier.dispose);
+  ref.onDispose(() {
+    notifier.disposeObserver();
+    notifier.dispose();
+  });
 
   // Distinct module routes that are NOT served inside the bottom-nav shell.
   final moduleRoutes = AppModules.all
@@ -156,11 +182,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
       }
 
+      // App lock: block every screen behind the device PIN/biometric until unlocked (or,
+      // if this device has never set one up, until setup is done) — checked before the
+      // attendance gate, since neither attendance data nor anything else should be
+      // reachable pre-unlock.
+      if (loggedIn && loc != _appLockRoute) {
+        // Locked by default (see AppLockState.initial) until explicitly cleared by a
+        // successful unlock/setup — so this fails safe even before the first `refresh()`
+        // (which only fills in hasMpin/biometric info, see AppLockNotifier.refresh) resolves.
+        if (ref.read(appLockProvider).locked) {
+          return '$_appLockRoute?from=${Uri.encodeComponent(state.uri.toString())}';
+        }
+      }
+
       // Attendance gate: block every screen until today's clock-in (and any
       // open break) is resolved. `loaded == false` means the fetch hasn't
       // come back yet — route to the gate page too rather than flash the
       // destination screen first; it kicks the fetch off itself.
-      if (loggedIn && loc != _gateExemptRoute) {
+      if (loggedIn && loc != _gateExemptRoute && loc != _appLockRoute) {
         final gate = ref.read(attendanceGateProvider);
         if (!gate.loaded) {
           ref.read(attendanceGateProvider.notifier).refresh();
@@ -178,25 +217,43 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/auth', builder: (_, __) => const DeviceLoginPage()),
       GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
 
-      ShellRoute(
-        builder: (context, state, child) => MainShell(child: child),
-        routes: [
-          GoRoute(path: '/home', builder: (_, __) => const HomePage()),
-          GoRoute(
-            path: '/leads',
-            builder: (_, __) => const LeadsPage(),
-            routes: [
-              GoRoute(
-                path: ':id',
-                builder: (_, s) =>
-                    LeadDetailPage(id: int.parse(s.pathParameters['id']!)),
-              ),
-            ],
-          ),
-          GoRoute(path: '/target', builder: (_, __) => const TargetPage()),
-          GoRoute(path: '/attendance', builder: (_, __) => const AttendancePage()),
-          GoRoute(path: '/payroll', builder: (_, __) => const PayrollPage()),
-          GoRoute(path: '/profile', builder: (_, __) => const ProfilePage()),
+      // StatefulShellRoute (not a plain ShellRoute) — each tab keeps its own Navigator/state
+      // in an IndexedStack behind ONE persistent Scaffold+BottomNavigationBar. A plain
+      // ShellRoute rebuilds the whole shell (including the nav bar) on every navigation, and
+      // `context.push('/leads')` from another tab would stack a second shell — with its own
+      // second bottom nav — on top instead of switching tabs. Tab switches must use
+      // `context.go(route)` (routes to the branch, see MainShell.goBranch), never `.push`.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => MainShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/home', builder: (_, __) => const HomePage()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/leads',
+              builder: (_, __) => const LeadsPage(),
+              routes: [
+                GoRoute(
+                  path: ':id',
+                  builder: (_, s) =>
+                      LeadDetailPage(id: int.parse(s.pathParameters['id']!)),
+                ),
+              ],
+            ),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/target', builder: (_, __) => const TargetPage()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/attendance', builder: (_, __) => const AttendancePage()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/payroll', builder: (_, __) => const PayrollPage()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: '/profile', builder: (_, __) => const ProfilePage()),
+          ]),
         ],
       ),
 
@@ -232,6 +289,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/quick-actions', builder: (_, __) => const QuickActionsPage()),
       GoRoute(
           path: _gateExemptRoute, builder: (_, __) => const ClockInRequiredPage()),
+      GoRoute(
+        path: _appLockRoute,
+        builder: (_, s) => AppLockPage(redirectTo: s.uri.queryParameters['from'] ?? '/home'),
+      ),
+      GoRoute(path: '/change-mpin', builder: (_, __) => const ChangeMpinPage()),
+      GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfilePage()),
 
       // One flat route per catalogue module.
       for (final route in moduleRoutes)
