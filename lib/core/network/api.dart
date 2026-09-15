@@ -52,7 +52,7 @@ class Api {
   static List<Map<String, dynamic>> _asList(dynamic body) {
     dynamic v = body;
     if (v is Map) {
-      v = v['data'] ?? v['items'] ?? v['results'] ?? v['records'] ?? v;
+      v = v['data'] ?? v['items'] ?? v['results'] ?? v['records'] ?? v['devices'] ?? v;
       if (v is Map && v['data'] is List) v = v['data'];
     }
     if (v is List) {
@@ -77,12 +77,15 @@ String apiErrorMessage(Object e) {
   if (e is DioException) {
     final data = e.response?.data;
     if (data is Map) {
-      if (data['message'] is String) return data['message'] as String;
+      // Prefer the specific field error ("A reason is required when clocking
+      // in late.") over the top-level `message`, which some endpoints leave
+      // as a generic "The given data was invalid." wrapper.
       final errs = data['errors'];
       if (errs is Map && errs.isNotEmpty) {
         final first = errs.values.first;
         if (first is List && first.isNotEmpty) return first.first.toString();
       }
+      if (data['message'] is String) return data['message'] as String;
     }
     if (e.type == DioExceptionType.connectionError) {
       return 'No connection. Check your network and try again.';

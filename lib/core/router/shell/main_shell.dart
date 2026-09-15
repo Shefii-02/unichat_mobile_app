@@ -7,13 +7,15 @@ class MainShell extends StatelessWidget {
 
   static const _tabs = [
     _Tab('/home', Icons.home_outlined, Icons.home_rounded, 'Home'),
-    _Tab('/chats', Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded,
-        'Chats'),
-    _Tab('/leads', Icons.trending_up_outlined, Icons.trending_up_rounded,
-        'Leads'),
-    _Tab('/contacts', Icons.contacts_outlined, Icons.contacts_rounded,
-        'Contacts'),
-    _Tab('/more', Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
+    _Tab('/leads', Icons.people_outline_rounded, Icons.people_rounded, 'Leads'),
+    _Tab('/target', Icons.track_changes_outlined, Icons.track_changes_rounded,
+        'Target'),
+    _Tab('/attendance', Icons.fingerprint_outlined, Icons.fingerprint_rounded,
+        'Attend.'),
+    _Tab('/payroll', Icons.account_balance_wallet_outlined,
+        Icons.account_balance_wallet_rounded, 'Payroll'),
+    _Tab('/profile', Icons.person_outline_rounded, Icons.person_rounded,
+        'Profile'),
   ];
 
   int _tabIndex(String location) {

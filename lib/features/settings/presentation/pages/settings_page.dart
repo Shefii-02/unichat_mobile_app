@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/widgets/app_avatar.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
@@ -54,6 +55,10 @@ class SettingsPage extends ConsumerWidget {
 
           _section('Security', [
             _tile(Icons.lock_outline, 'Change Password', trailing: const Icon(Icons.chevron_right)),
+            _tile(Icons.devices_rounded, 'Linked Devices',
+                subtitle: 'Manage devices signed in to this account',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/devices')),
             _toggleTile(Icons.fingerprint, 'Biometric Login', false, (_) {}),
           ]),
 
@@ -99,13 +104,13 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  Widget _tile(IconData icon, String label, {String? subtitle, Widget? trailing}) {
+  Widget _tile(IconData icon, String label, {String? subtitle, Widget? trailing, VoidCallback? onTap}) {
     return ListTile(
       leading: Icon(icon, color: AppColors.textSecondary, size: 22),
       title: Text(label, style: const TextStyle(fontSize: 14)),
       subtitle: subtitle != null ? Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textLight)) : null,
       trailing: trailing,
-      onTap: () {},
+      onTap: onTap ?? () {},
     );
   }
 

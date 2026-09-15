@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
+import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 import 'package:unichat_mobile_app/core/utils/format_utils.dart';
 import 'package:unichat_mobile_app/core/widgets/app_avatar.dart';
 import 'package:unichat_mobile_app/features/chats/presentation/providers/chats_provider.dart';
@@ -24,6 +26,19 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // The bottom-nav tab bypasses the module catalogue's own permission gating entirely (it's
+    // hardcoded in MainShell, not driven by AppModules) — self-check here so a role without
+    // chat access can't reach it just by tapping the tab.
+    if (!PermissionGuard.can('wa_chat.chats.view')) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Chats')),
+        body: Center(
+          child: Text("You don't have access to this section",
+              style: TextStyle(color: context.mutedColor)),
+        ),
+      );
+    }
+
     final filter   = ref.watch(chatFilterProvider);
     final search   = ref.watch(chatSearchProvider);
     final convsAsync = ref.watch(conversationsProvider);

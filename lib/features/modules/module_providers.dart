@@ -45,8 +45,53 @@ final wahaSessionsProvider =
 // ── HR ──────────────────────────────────────────────────────────────────
 final hrAttendanceMeProvider =
     FutureProvider((ref) => Api.one('/hr/attendance/me'));
+// Home-screen aggregate — attendance + sales target + streak + rank +
+// leads/pipeline/follow-ups/tasks in one call. See DashboardController@me.
+final dashboardMeProvider =
+    FutureProvider((ref) => Api.one('/hr/dashboard/me'));
+// Per-day status for a month (present/absent/on_leave/half_day/weekly_off/upcoming) +
+// month tile counts — powers the Attendance screen's calendar strip. Family param is the
+// month ("YYYY-MM"); null means "current month" (server default).
+final attendanceCalendarProvider =
+    FutureProvider.family<Map<String, dynamic>, String?>(
+  (ref, month) => Api.one('/hr/attendance/me/calendar', query: month != null ? {'month': month} : null),
+);
+// Per-day clock in/out + breaks + leave for a month — powers the Attendance screen's
+// "Recent activity" list.
+final attendanceHistoryProvider =
+    FutureProvider.family<Map<String, dynamic>, String?>(
+  (ref, month) => Api.one('/hr/attendance/me/history', query: month != null ? {'month': month} : null),
+);
+
+// ── Sales / Target ──────────────────────────────────────────────────────
+// Target screen aggregate — own progress, weekly breakdown, days left, leaderboard. Family
+// param is the month ("YYYY-MM"); null means "current month".
+final salesMeProvider = FutureProvider.family<Map<String, dynamic>, String?>(
+  (ref, month) => Api.one('/hr/sales/me', query: month != null ? {'month': month} : null),
+);
+
+// ── Payroll (self-service) ───────────────────────────────────────────────
+// The caller's own payslip for a period ("YYYY-MM", null = latest released). Null result
+// means no released payslip exists yet for that period.
+final payrollMeProvider =
+    FutureProvider.family<Map<String, dynamic>?, String?>((ref, period) async {
+  final res = await Api.one('/hr/payroll/me', query: period != null ? {'period': period} : null);
+  final data = res['data'];
+  return (data is Map) ? data.cast<String, dynamic>() : null;
+});
+final payrollHistoryProvider =
+    FutureProvider((ref) => Api.list('/hr/payroll/me/history'));
 final hrLeaveProvider =
     FutureProvider((ref) => Api.list('/hr/leave'));
+// Today's team attendance — only resolves for users with hr.manage /
+// hr.attendance.view_all / staff.view (server-enforced); callers should gate
+// the section on the equivalent client-side permission before watching this.
+final hrTeamAttendanceTodayProvider =
+    FutureProvider((ref) => Api.list('/hr/attendance'));
+
+// ── CRM tasks ───────────────────────────────────────────────────────────
+final crmMyTasksProvider =
+    FutureProvider((ref) => Api.list('/crm/tasks', query: {'mine': true}));
 
 // ── Staff ───────────────────────────────────────────────────────────────
 final staffListProvider =
@@ -62,7 +107,9 @@ final currentPlanProvider =
     FutureProvider((ref) => Api.one('/plans/current'));
 
 // ── Devices ─────────────────────────────────────────────────────────────
-final devicesProvider = FutureProvider((ref) => Api.list('/devices'));
+// Full object (not Api.list) so the page can also show "X of Y device slots
+// used" from `max`/`active`, not just the device rows.
+final devicesProvider = FutureProvider((ref) => Api.one('/devices'));
 
 // ── Knowledge base ──────────────────────────────────────────────────────
 final knowledgeBaseProvider = FutureProvider((ref) => Api.list('/wa-agent/knowledge-base'));

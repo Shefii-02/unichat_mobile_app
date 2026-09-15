@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
+import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
+import 'package:unichat_mobile_app/features/leads/lead_stage.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 final _leadProvider =
@@ -38,25 +41,26 @@ class LeadDetailPage extends ConsumerWidget {
             Tab(text: 'Timeline'),
           ]),
           actions: [
-            PopupMenuButton<String>(
-              onSelected: (v) async {
-                if (v == 'delete') {
-                  if (!await confirm(context,
-                      title: 'Delete lead?',
-                      destructive: true,
-                      confirmLabel: 'Delete')) {
-                    return;
+            if (PermissionGuard.can('leads.manage'))
+              PopupMenuButton<String>(
+                onSelected: (v) async {
+                  if (v == 'delete') {
+                    if (!await confirm(context,
+                        title: 'Delete lead?',
+                        destructive: true,
+                        confirmLabel: 'Delete')) {
+                      return;
+                    }
+                    final ok = await runAction(
+                        context, () => Api.delete('/leads/$id'),
+                        success: 'Deleted');
+                    if (ok && context.mounted) Navigator.of(context).pop();
                   }
-                  final ok = await runAction(
-                      context, () => Api.delete('/leads/$id'),
-                      success: 'Deleted');
-                  if (ok && context.mounted) Navigator.of(context).pop();
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Text('Delete lead')),
-              ],
-            ),
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'delete', child: Text('Delete lead')),
+                ],
+              ),
           ],
         ),
         body: async.when(
@@ -148,6 +152,8 @@ class LeadDetailPage extends ConsumerWidget {
           label: 'Stage',
           value: stage,
           options: _stages,
+          tintOf: (s) => stageTint[s],
+          labelOf: stageLabel,
           onChanged: (v) async {
             final ok = await runAction(context,
                 () => Api.put('/leads/$id', data: {'stage': v}),
@@ -281,6 +287,10 @@ class LeadDetailPage extends ConsumerWidget {
   }
 
   Future<void> _assign(BuildContext context, WidgetRef ref) async {
+    // The full staff roster (names, emails) was fetched here regardless of whether the current
+    // user holds staff.view — any role that could open a lead and tap Assign saw every other
+    // staff member's name via this picker.
+    if (!PermissionGuard.can('staff.view')) return;
     final staff = await Api.list('/staff').catchError((_) => <Rec>[]);
     if (!context.mounted || staff.isEmpty) return;
     final data = <String, dynamic>{};
@@ -331,11 +341,16 @@ class _EditableRow extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.tintOf,
+    this.labelOf,
   });
   final String label;
   final String value;
   final List<String> options;
   final ValueChanged<String> onChanged;
+  /// Optional per-option colour (e.g. lead-stage tints), falling back to the theme default.
+  final Tint? Function(String option)? tintOf;
+  final String Function(String option)? labelOf;
 
   @override
   Widget build(BuildContext context) {
@@ -352,10 +367,13 @@ class _EditableRow extends StatelessWidget {
               spacing: 6,
               children: options.map((o) {
                 final sel = o == value;
+                final tint = tintOf?.call(o);
                 return ChoiceChip(
-                  label: Text(o.replaceAll('_', ' ')),
+                  label: Text(labelOf?.call(o) ?? o.replaceAll('_', ' ')),
                   selected: sel,
                   onSelected: (_) => sel ? null : onChanged(o),
+                  selectedColor: tint?.$1,
+                  labelStyle: sel && tint != null ? TextStyle(color: tint.$2) : null,
                 );
               }).toList(),
             ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
 import 'package:unichat_mobile_app/features/auth/data/auth_repository.dart';
 import 'package:unichat_mobile_app/features/auth/data/device_auth_repository.dart';
 import 'package:unichat_mobile_app/features/auth/data/models/user_model.dart';
@@ -45,6 +46,7 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
   Future<void> logout() async {
     await ref.read(deviceAuthRepositoryProvider).logout();
     await ref.read(authRepositoryProvider).logout();
+    ref.read(attendanceGateProvider.notifier).clear();
     state = const AsyncData(null);
   }
 }

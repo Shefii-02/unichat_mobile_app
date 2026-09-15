@@ -21,11 +21,19 @@ class PermissionGuard {
   static bool canView(String section) => can('$section.view') || isAdmin;
   static bool canManage(String section) => can('$section.manage') || isAdmin;
 
+  // Role names come from two sources on the backend: the global system roles
+  // (superadmin/owner/admin/team_lead/counsellor/viewer — lowercase) and each company's own
+  // auto-seeded roles (Admin/Manager/Sales Agent/Support Agent/Viewer — Title Case). An exact
+  // match against the lowercase literals alone silently misses every company's own real-world
+  // "Admin" staff member (the role name a company actually assigns day to day) — normalize
+  // case here so both sources are recognized identically.
+  static String get _normalizedRole => _role.toLowerCase();
+
   /// Owner / superadmin bypass every permission check, mirroring the web app.
   static bool get isOwner =>
-      _role == 'owner' || _role == 'superadmin' || _role == 'super_admin';
-  static bool get isAdmin   => isOwner || _role == 'admin';
-  static bool get isManager => _role == 'manager' || _role == 'team_lead' || isAdmin;
+      _normalizedRole == 'owner' || _normalizedRole == 'superadmin' || _normalizedRole == 'super_admin';
+  static bool get isAdmin   => isOwner || _normalizedRole == 'admin';
+  static bool get isManager => _normalizedRole == 'manager' || _normalizedRole == 'team_lead' || isAdmin;
   static String get role    => _role;
 
   static List<String> get all => _permissions;

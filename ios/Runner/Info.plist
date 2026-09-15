@@ -14,6 +14,8 @@
 	<string>Flowexa needs the microphone to record voice notes and video attachments.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Flowexa uses Face ID to unlock the app and protect sensitive customer data.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Flowexa checks your location when you clock in/out or take a break, to confirm you're within the office radius.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

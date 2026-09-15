@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 final _contactProvider =
@@ -21,6 +22,7 @@ class ContactDetailPage extends ConsumerWidget {
         actions: [
           async.maybeWhen(
             data: (_) {
+              if (!PermissionGuard.can('contacts.manage')) return const SizedBox.shrink();
               return PopupMenuButton<String>(
                 onSelected: (v) async {
                   if (v == 'delete') {
@@ -262,7 +264,11 @@ class ContactDetailPage extends ConsumerWidget {
   }
 
   Future<void> _createLead(BuildContext context, WidgetRef ref, Rec c) async {
-    final staff = await Api.list('/staff').catchError((_) => <Rec>[]);
+    // Full staff roster was fetched here regardless of staff.view — the "Assign to" field
+    // below already tolerates an empty list, so gating the fetch just omits that field.
+    final staff = PermissionGuard.can('staff.view')
+        ? await Api.list('/staff').catchError((_) => <Rec>[])
+        : <Rec>[];
     if (!context.mounted) return;
     final data = <String, dynamic>{'contact_id': c['id']};
     await showFormSheet(

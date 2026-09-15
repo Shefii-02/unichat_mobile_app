@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
+import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart';
+import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
+import 'package:unichat_mobile_app/features/attendance/leave_request.dart';
 import 'module_providers.dart';
 import '_shared.dart';
 
@@ -23,11 +27,15 @@ class StaffPage extends ConsumerWidget {
             Tab(text: 'Roles'),
           ]),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _edit(context, ref, null),
-          icon: const Icon(Icons.person_add_alt_1_rounded),
-          label: const Text('Add staff'),
-        ),
+        // "Add staff" and every per-row action below previously rendered unconditionally —
+        // reachable by anyone who could open this page at all (staff.view), not just staff.manage.
+        floatingActionButton: PermissionGuard.can('staff.manage')
+            ? FloatingActionButton.extended(
+                onPressed: () => _edit(context, ref, null),
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+                label: const Text('Add staff'),
+              )
+            : null,
         body: TabBarView(children: [
           ProviderList(
             provider: staffListProvider,
@@ -47,7 +55,7 @@ class StaffPage extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     StatusPill(active ? 'active' : 'inactive'),
-                    RowMenu(items: [
+                    RowMenu(items: PermissionGuard.can('staff.manage') ? [
                       ('Edit', Icons.edit_rounded, () => _edit(context, ref, s)),
                       (
                         active ? 'Deactivate' : 'Activate',
@@ -81,7 +89,7 @@ class StaffPage extends ConsumerWidget {
                           if (ok) ref.invalidate(staffListProvider);
                         }
                       ),
-                    ]),
+                    ] : const []),
                   ],
                 ),
                 footer: s['department'] != null
@@ -230,7 +238,7 @@ class HrPage extends ConsumerWidget {
             final idx = DefaultTabController.of(tabCtx).index;
             if (idx != 1) return const SizedBox.shrink();
             return FloatingActionButton.extended(
-              onPressed: () => _requestLeave(tabCtx, ref),
+              onPressed: () => requestLeave(tabCtx, ref),
               icon: const Icon(Icons.add_rounded),
               label: const Text('Request leave'),
             );
@@ -240,10 +248,19 @@ class HrPage extends ConsumerWidget {
           ProviderObject(
             provider: hrAttendanceMeProvider,
             builder: (context, d) {
-              final clockedIn = d['clock_in'] != null &&
-                  (d['clock_out'] == null || '${d['clock_out']}'.isEmpty);
-              final onBreak = d['on_break'] == true ||
-                  (d['break_start'] != null && d['break_end'] == null);
+              // `/hr/attendance/me` nests today's row under `today` (and any
+              // running break under `open_break`) — it doesn't flatten those
+              // fields onto the root object.
+              final today = (d['today'] is Map)
+                  ? (d['today'] as Map).cast<String, dynamic>()
+                  : null;
+              final settings = (d['settings'] is Map)
+                  ? (d['settings'] as Map).cast<String, dynamic>()
+                  : <String, dynamic>{};
+              final clockedIn = today != null &&
+                  today['clock_in_at'] != null &&
+                  today['clock_out_at'] == null;
+              final onBreak = d['open_break'] != null;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -277,45 +294,32 @@ class HrPage extends ConsumerWidget {
                               .titleLarge
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
-                        if (d['clock_in'] != null)
-                          Text('Since ${_time(d['clock_in'])}',
+                        if (today?['clock_in_at'] != null)
+                          Text('Since ${_time(today!['clock_in_at'])}',
                               style: TextStyle(color: context.mutedColor)),
-                        if (d['worked_hours'] != null ||
-                            d['total_hours'] != null)
+                        if (today?['worked_minutes'] != null)
                           Text(
-                              '${str(d['worked_hours'] ?? d['total_hours'])} h today',
+                              '${(today!['worked_minutes'] as num) ~/ 60}h '
+                              '${(today['worked_minutes'] as num) % 60}m today',
                               style: TextStyle(color: context.mutedColor)),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (!clockedIn)
+                  if (!clockedIn && today?['clock_out_at'] == null)
                     FilledButton.icon(
-                      onPressed: () async {
-                        final ok = await runAction(context,
-                            () => Api.post('/hr/attendance/clock-in'),
-                            success: 'Clocked in');
-                        if (ok) ref.invalidate(hrAttendanceMeProvider);
-                      },
+                      onPressed: () =>
+                          _clockAction(context, ref, 'clock_in', settings),
                       icon: const Icon(Icons.login_rounded),
                       label: const Text('Clock in'),
                     )
-                  else
+                  else if (clockedIn)
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () async {
-                              final path = onBreak
-                                  ? '/hr/attendance/break/end'
-                                  : '/hr/attendance/break/start';
-                              final ok = await runAction(
-                                  context, () => Api.post(path),
-                                  success: onBreak
-                                      ? 'Break ended'
-                                      : 'Break started');
-                              if (ok) ref.invalidate(hrAttendanceMeProvider);
-                            },
+                            onPressed: () => _clockAction(context, ref,
+                                onBreak ? 'break_end' : 'break_start', settings),
                             icon: Icon(onBreak
                                 ? Icons.play_arrow_rounded
                                 : Icons.pause_rounded),
@@ -327,20 +331,20 @@ class HrPage extends ConsumerWidget {
                           child: FilledButton.icon(
                             style: FilledButton.styleFrom(
                                 backgroundColor: AppPalette.danger),
-                            onPressed: () async {
-                              final ok = await runAction(context,
-                                  () => Api.post('/hr/attendance/clock-out'),
-                                  success: 'Clocked out');
-                              if (ok) ref.invalidate(hrAttendanceMeProvider);
-                            },
+                            onPressed: onBreak
+                                ? null
+                                : () => _clockAction(
+                                    context, ref, 'clock_out', settings),
                             icon: const Icon(Icons.logout_rounded),
                             label: const Text('Clock out'),
                           ),
                         ),
                       ],
                     ),
-                  const SectionHeader('Today'),
-                  ..._pairs(d).map((e) => KvRow(e.$1, e.$2)),
+                  if (today != null) ...[
+                    const SectionHeader('Today'),
+                    ..._pairs(today).map((e) => KvRow(e.$1, e.$2)),
+                  ],
                 ],
               );
             },
@@ -383,58 +387,27 @@ class HrPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _requestLeave(BuildContext context, WidgetRef ref) async {
-    final types = await _safeList('/hr/leave/types');
-    if (!context.mounted) return;
-    final data = <String, dynamic>{};
-    final ok = await showFormSheet(
-      context,
-      title: 'Request leave',
-      submitLabel: 'Submit',
-      fields: (ctx) => [
-        if (types.isNotEmpty)
-          FSelect<Rec>(
-            label: 'Leave type',
-            options: types,
-            labelOf: (t) => str(t['name'] ?? t['label']),
-            onSaved: (t) => data['leave_type_id'] = t?['id'],
-          )
-        else
-          FText(label: 'Type', required: true, onSaved: (v) => data['type'] = v),
-        _DateField(
-          label: 'Start date',
-          onSaved: (v) => data['start_date'] = v,
-        ),
-        _DateField(
-          label: 'End date',
-          onSaved: (v) => data['end_date'] = v,
-        ),
-        FText(
-          label: 'Reason',
-          required: true,
-          maxLines: 3,
-          onSaved: (v) => data['reason'] = v,
-        ),
-      ],
-      onSubmit: () => Api.post('/hr/leave', data: data),
-    );
-    if (ok) ref.invalidate(hrLeaveProvider);
+  Future<void> _clockAction(BuildContext context, WidgetRef ref, String action,
+      Map<String, dynamic> settings) async {
+    final ok = await attendanceAction(context, action: action, settings: settings);
+    if (!ok) return;
+    ref.invalidate(hrAttendanceMeProvider);
+    ref.read(attendanceGateProvider.notifier).refresh();
   }
 
   List<(String, String)> _pairs(Map<String, dynamic> d) {
     const keep = {
-      'clock_in',
-      'clock_out',
-      'worked_hours',
-      'total_hours',
+      'clock_in_at',
+      'clock_out_at',
+      'worked_minutes',
       'break_minutes',
-      'overtime_hours',
+      'overtime_minutes',
       'status',
-      'date'
+      'work_date',
     };
     return d.entries
         .where((e) => keep.contains(e.key) && e.value != null)
-        .map((e) => (e.key.replaceAll('_', ' '), '${e.value}'))
+        .map((e) => (e.key.replaceAll('_at', '').replaceAll('_', ' '), '${e.value}'))
         .toList();
   }
 
@@ -489,12 +462,19 @@ class OtpServicePage extends ConsumerWidget {
                           style: TextStyle(
                               color: context.mutedColor, fontSize: 12)),
                       const SizedBox(height: 4),
-                      SelectableText(
-                        str(d['api_token'] ?? d['token'], 'not generated'),
-                        style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.w600),
-                      ),
+                      // The raw token used to render for anyone who could open this page at
+                      // all (otp.view) — restrict the cleartext value to otp.manage.
+                      PermissionGuard.can('otp.manage')
+                          ? SelectableText(
+                              str(d['api_token'] ?? d['token'], 'not generated'),
+                              style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w600),
+                            )
+                          : Text('•••••••••••••••• (hidden)',
+                              style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  color: context.mutedColor)),
                     ],
                   ),
                 ),
@@ -502,20 +482,21 @@ class OtpServicePage extends ConsumerWidget {
                 Wrap(
                   spacing: 8,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        if (!await confirm(context,
-                            title: 'Reset API token?',
-                            message: 'Existing integrations will stop working.',
-                            confirmLabel: 'Reset')) { return; }
-                        final ok = await runAction(context,
-                            () => Api.post('/otp-service/reset-token'),
-                            success: 'Token reset');
-                        if (ok) ref.invalidate(otpServiceProvider);
-                      },
-                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: const Text('Reset token'),
-                    ),
+                    if (PermissionGuard.can('otp.manage'))
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          if (!await confirm(context,
+                              title: 'Reset API token?',
+                              message: 'Existing integrations will stop working.',
+                              confirmLabel: 'Reset')) { return; }
+                          final ok = await runAction(context,
+                              () => Api.post('/otp-service/reset-token'),
+                              success: 'Token reset');
+                          if (ok) ref.invalidate(otpServiceProvider);
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Reset token'),
+                      ),
                     OutlinedButton.icon(
                       onPressed: () => _testSend(context),
                       icon: const Icon(Icons.send_rounded, size: 16),
@@ -896,7 +877,9 @@ class IntegrationsPage extends ConsumerWidget {
                       (k['is_active'] == true || k['active'] == true)
                           ? 'active'
                           : (k['verified'] == true ? 'verified' : 'inactive')),
-                  RowMenu(items: [
+                  // These act on company AI-provider API keys — restrict to wa_chat.api_keys.manage
+                  // (matching the backend route gate) rather than whatever got this page open at all.
+                  RowMenu(items: PermissionGuard.can('wa_chat.api_keys.manage') ? [
                     (
                       'Verify',
                       Icons.verified_rounded,
@@ -933,7 +916,7 @@ class IntegrationsPage extends ConsumerWidget {
                         if (ok) ref.invalidate(companyApiKeysProvider);
                       }
                     ),
-                  ]),
+                  ] : const []),
                 ],
               ),
             ),
@@ -945,49 +928,6 @@ class IntegrationsPage extends ConsumerWidget {
 }
 
 // ══════════════════════════ shared bits ══════════════════════════
-
-class _DateField extends StatefulWidget {
-  const _DateField({required this.label, required this.onSaved});
-  final String label;
-  final void Function(String) onSaved;
-  @override
-  State<_DateField> createState() => _DateFieldState();
-}
-
-class _DateFieldState extends State<_DateField> {
-  DateTime? _date;
-  @override
-  Widget build(BuildContext context) {
-    return FormField<DateTime>(
-      validator: (_) => _date == null ? 'Pick a date' : null,
-      onSaved: (_) => widget.onSaved(_date == null
-          ? ''
-          : '${_date!.year}-${_date!.month.toString().padLeft(2, '0')}-${_date!.day.toString().padLeft(2, '0')}'),
-      builder: (state) => FField(
-        label: widget.label,
-        child: OutlinedButton.icon(
-          onPressed: () async {
-            final now = DateTime.now();
-            final picked = await showDatePicker(
-              context: context,
-              initialDate: _date ?? now,
-              firstDate: now.subtract(const Duration(days: 30)),
-              lastDate: now.add(const Duration(days: 365)),
-            );
-            if (picked != null) {
-              setState(() => _date = picked);
-              state.didChange(picked);
-            }
-          },
-          icon: const Icon(Icons.calendar_today_rounded, size: 16),
-          label: Text(_date == null
-              ? 'Select'
-              : '${_date!.day}/${_date!.month}/${_date!.year}'),
-        ),
-      ),
-    );
-  }
-}
 
 Future<List<Rec>> _safeList(String path) async {
   try {

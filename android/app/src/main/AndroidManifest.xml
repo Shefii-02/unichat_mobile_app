@@ -7,6 +7,10 @@
     <!-- QR device-login scanner (mobile_scanner) + attachments (image_picker) -->
     <uses-permission android:name="android.permission.CAMERA"/>
 
+    <!-- Attendance geofence check on clock in/out/break (geolocator) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <!-- Local notifications (flutter_local_notifications) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
