@@ -45,4 +45,5 @@ class LocalStorage {
   static const kDeviceUid = 'device_uid';
   static const kDeviceName = 'device_name';
   static const kPushToken = 'push_token';
+  static const kAppLockHintSeen = 'app_lock_hint_seen';
 }

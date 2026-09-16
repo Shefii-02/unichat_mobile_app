@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
+import 'package:unichat_mobile_app/core/constants/api_constants.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
@@ -47,8 +48,8 @@ class ProfilePage extends ConsumerWidget {
                     CircleAvatar(
                       radius: 36,
                       backgroundColor: M.heroAvatarBg,
-                      backgroundImage: (user?.avatar != null && user!.avatar!.isNotEmpty)
-                          ? NetworkImage(user.avatar!)
+                      backgroundImage: resolveStorageUrl(user?.avatar) != null
+                          ? NetworkImage(resolveStorageUrl(user!.avatar)!)
                           : null,
                       child: (user?.avatar == null || user!.avatar!.isEmpty)
                           ? Text(initials, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 20, color: M.heroAvatarText))

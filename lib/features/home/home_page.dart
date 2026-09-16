@@ -1,12 +1,13 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/attendance/widgets/attendance_status_card.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
+import 'package:unichat_mobile_app/core/constants/api_constants.dart';
 
 /// Day-to-day CRM/HRMS dashboard: sales target, attendance (clock in/out,
 /// breaks), personal stats (new leads / follow-ups / streak / rank), pipeline,
@@ -28,9 +29,6 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final canManageHr = PermissionGuard.can('hr.manage') ||
-        PermissionGuard.can('hr.attendance.view_all') ||
-        PermissionGuard.can('staff.view');
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -42,7 +40,6 @@ class HomePage extends ConsumerWidget {
             ref.invalidate(hrAttendanceMeProvider);
             ref.invalidate(dashboardMeProvider);
             ref.invalidate(crmMyTasksProvider);
-            if (canManageHr) ref.invalidate(hrTeamAttendanceTodayProvider);
           },
           child: ListView(
             padding: const EdgeInsets.only(bottom: 32),
@@ -56,12 +53,55 @@ class HomePage extends ConsumerWidget {
               const _StatsStrip(),
               const _PipelineSection(),
               const _FollowUpsSection(),
-              if (canManageHr) const _TeamAttendanceToday(),
               const _TodayTasks(),
               const _NextUpCard(),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shown by every dashboard section in place of the mockup's content whenever that
+/// section's data isn't a normal "loaded successfully" state — loading, a failed request, or
+/// genuinely empty (e.g. no leads yet). Previously each section collapsed to
+/// `SizedBox(height: 0)` in all three cases, so a null/failed API response made the whole
+/// Home page look silently blank with no way to tell which section — or why — was missing.
+/// Always renders the section's own title, so at minimum it's clear *which* section has a
+/// problem.
+class _SectionPlaceholder extends StatelessWidget {
+  const _SectionPlaceholder({required this.title, required this.message, this.loading = false});
+  final String title;
+  final String message;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionHeader(title),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                if (loading) ...[
+                  SizedBox(
+                    width: 13, height: 13,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: context.mutedColor),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(message, style: TextStyle(color: context.mutedColor, fontSize: 12.5)),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -99,13 +139,13 @@ class _HeroHeader extends ConsumerWidget {
                 child: CircleAvatar(
                   radius: 20,
                   backgroundColor: M.heroAvatarBg,
-                  backgroundImage: (user?.avatar != null && user!.avatar!.isNotEmpty)
-                      ? NetworkImage(user.avatar!)
+                  backgroundImage: resolveStorageUrl(user?.avatar) != null
+                      ? NetworkImage(resolveStorageUrl(user!.avatar)!)
                       : null,
                   child: (user?.avatar == null || user!.avatar!.isEmpty)
                       ? Text(
                           (user?.name.isNotEmpty ?? false) ? user!.name[0].toUpperCase() : '?',
-                          style: const TextStyle(fontWeight: FontWeight.w500, color: M.heroAvatarText, fontSize: 13),
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: M.heroAvatarText, fontSize: 13),
                         )
                       : null,
                 ),
@@ -117,7 +157,7 @@ class _HeroHeader extends ConsumerWidget {
                   children: [
                     Text(greeting, style: const TextStyle(color: M.heroMuted, fontSize: 12)),
                     Text(user?.name ?? '',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.white),
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                         overflow: TextOverflow.ellipsis),
                   ],
                 ),
@@ -152,7 +192,7 @@ class _HeroHeader extends ConsumerWidget {
                         const SizedBox(height: 2),
                         RichText(
                           text: TextSpan(
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: Colors.white),
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
                             children: [
                               TextSpan(text: '${pct.toStringAsFixed(0)}% '),
                               TextSpan(
@@ -178,7 +218,7 @@ class _HeroHeader extends ConsumerWidget {
                           valueColor: const AlwaysStoppedAnimation(M.heroRing),
                         ),
                         Text('${pct.toStringAsFixed(0)}%',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500)),
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -235,8 +275,9 @@ class _PersonalStatsStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(dashboardMeProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox(height: 0),
+    return async.when(
+      loading: () => const _SectionPlaceholder(title: 'Today', message: 'Loading…', loading: true),
+      error: (e, _) => _SectionPlaceholder(title: 'Today', message: "Couldn't load — ${apiErrorMessage(e)}"),
       data: (d) {
         final leads = (d['leads'] is Map) ? (d['leads'] as Map) : const {};
         final followUps = (d['follow_ups'] is Map) ? (d['follow_ups'] as Map) : const {};
@@ -254,7 +295,7 @@ class _PersonalStatsStrip extends ConsumerWidget {
         ];
 
         return SizedBox(
-          height: 74,
+          height: 80,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -269,7 +310,7 @@ class _PersonalStatsStrip extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(c.$2, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: c.$3.$2)),
+                    Text(c.$2, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.$3.$2)),
                     Text(c.$1,
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 10, color: c.$3.$3),
@@ -285,20 +326,25 @@ class _PersonalStatsStrip extends ConsumerWidget {
   }
 }
 
-// ══════════════════════════ Company statistics (existing, permission-gated) ══════════════════════════
+// ══════════════════════════ Company statistics ══════════════════════════
 
 class _StatsStrip extends ConsumerWidget {
   const _StatsStrip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Company-wide message/lead/contact/campaign totals — gated behind the
-    // same permission as the dedicated Analytics module tile.
-    if (!PermissionGuard.can('dashboard.view')) return const SizedBox(height: 0);
-
+    // Home is the same screen for every user, regardless of role — no separate admin
+    // variant. If the account can't see /analytics/overview, the API 403s; that's an
+    // expected "not applicable to this role" outcome (most staff don't hold
+    // dashboard.view) so it collapses silently rather than reading as a bug. Any other
+    // failure (network, 500) is a real problem and shown, same as the other sections.
     final async = ref.watch(analyticsOverviewProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox(height: 0),
+    return async.when(
+      loading: () => const SizedBox(height: 0),
+      error: (e, _) {
+        if (e is DioException && e.response?.statusCode == 403) return const SizedBox(height: 0);
+        return _SectionPlaceholder(title: 'Statistics', message: "Couldn't load — ${apiErrorMessage(e)}");
+      },
       data: (d) {
         final chips = <(String, String)>[
           ('Messages', compact(d['messages_sent'] ?? d['total_messages'])),
@@ -306,7 +352,9 @@ class _StatsStrip extends ConsumerWidget {
           ('Contacts', compact(d['contacts'] ?? d['total_contacts'])),
           ('Campaigns', compact(d['campaigns'] ?? d['total_campaigns'])),
         ].where((c) => c.$2 != '0').toList();
-        if (chips.isEmpty) return const SizedBox(height: 0);
+        if (chips.isEmpty) {
+          return const _SectionPlaceholder(title: 'Statistics', message: 'No activity yet this month.');
+        }
         return Padding(
           padding: const EdgeInsets.only(bottom: 4),
           child: Column(
@@ -365,8 +413,9 @@ class _PipelineSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(dashboardMeProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox(height: 0),
+    return async.when(
+      loading: () => const _SectionPlaceholder(title: 'Pipeline', message: 'Loading…', loading: true),
+      error: (e, _) => _SectionPlaceholder(title: 'Pipeline', message: "Couldn't load — ${apiErrorMessage(e)}"),
       data: (d) {
         final pipeline = (d['pipeline'] is Map) ? (d['pipeline'] as Map) : const {};
         final stages = <(String, int, Tint)>[
@@ -374,7 +423,9 @@ class _PipelineSection extends ConsumerWidget {
           ('Contacted', (pipeline['contacted'] ?? 0) as int, tintAmber),
           ('Won', (pipeline['won'] ?? 0) as int, tintGreen),
         ];
-        if (stages.every((s) => s.$2 == 0)) return const SizedBox(height: 0);
+        if (stages.every((s) => s.$2 == 0)) {
+          return const _SectionPlaceholder(title: 'Pipeline', message: 'No leads in your pipeline yet.');
+        }
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
@@ -400,7 +451,7 @@ class _PipelineSection extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${s.$2}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: s.$3.$2)),
+                          Text('${s.$2}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: s.$3.$2)),
                           Text(s.$1, style: TextStyle(color: s.$3.$3, fontSize: 10)),
                         ],
                       ),
@@ -432,15 +483,18 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(dashboardMeProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox(height: 0),
+    return async.when(
+      loading: () => const _SectionPlaceholder(title: 'Follow-ups', message: 'Loading…', loading: true),
+      error: (e, _) => _SectionPlaceholder(title: 'Follow-ups', message: "Couldn't load — ${apiErrorMessage(e)}"),
       data: (d) {
         final followUps = (d['follow_ups'] is Map) ? (d['follow_ups'] as Map) : const {};
         final counts = (followUps['counts'] is Map) ? (followUps['counts'] as Map) : const {};
         final items = (followUps['items'] is List)
             ? (followUps['items'] as List).whereType<Map>().toList()
             : const <Map>[];
-        if (items.isEmpty) return const SizedBox(height: 0);
+        if (items.isEmpty) {
+          return const _SectionPlaceholder(title: 'Follow-ups', message: 'Nothing to follow up on.');
+        }
 
         final filtered = items.where((f) {
           switch (_filter) {
@@ -492,7 +546,7 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
                       onSelected: (_) => setState(() => _filter = f),
                       labelStyle: TextStyle(
                           fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                           color: selected ? theme.colorScheme.surface : context.mutedColor),
                       selectedColor: theme.colorScheme.onSurface,
                       backgroundColor: context.altSurface,
@@ -532,7 +586,7 @@ class _CountTile extends StatelessWidget {
       decoration: BoxDecoration(color: tint.$1, borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
-          Text('${value ?? 0}', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 17, color: tint.$2)),
+          Text('${value ?? 0}', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17, color: tint.$2)),
           Text(label, style: TextStyle(color: tint.$3, fontSize: 10)),
         ],
       ),
@@ -571,7 +625,7 @@ class _FollowUpRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(str(item['contact_name'], item['title'] ?? 'Follow-up'),
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    style: const TextStyle(fontSize: 13),
                     overflow: TextOverflow.ellipsis),
                 Text('${type == 'call' ? 'Call' : 'Message'} · ${_dueLabel(item['due_at'])}',
                     style: TextStyle(color: context.mutedColor, fontSize: 11.5)),
@@ -581,7 +635,7 @@ class _FollowUpRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(color: tint.$1, borderRadius: BorderRadius.circular(8)),
-            child: Text(pillLabel, style: TextStyle(color: tint.$2, fontSize: 10, fontWeight: FontWeight.w500)),
+            child: Text(pillLabel, style: TextStyle(color: tint.$2, fontSize: 10, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -602,69 +656,6 @@ class _FollowUpRow extends StatelessWidget {
   }
 }
 
-// ══════════════════════════ Team attendance (managers) ══════════════════════════
-
-class _TeamAttendanceToday extends ConsumerWidget {
-  const _TeamAttendanceToday();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(hrTeamAttendanceTodayProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox(height: 0),
-      data: (rows) {
-        if (rows.isEmpty) return const SizedBox(height: 0);
-        final shown = rows.take(6).toList();
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SectionHeader('Team attendance · today (${rows.length})'),
-              ...shown.map((r) {
-                final u = (r['user'] is Map) ? (r['user'] as Map) : const {};
-                final status = str(r['status'], 'absent');
-                final clockIn = r['clock_in_at'];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor:
-                            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                        child: Text(
-                          str(u['name'], '?').substring(0, 1).toUpperCase(),
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: Theme.of(context).colorScheme.primary,
-                              fontSize: 12.5),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(str(u['name'], 'Staff'),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      Text(
-                        clockIn != null ? time12(clockIn) : '—',
-                        style: TextStyle(color: context.mutedColor, fontSize: 12.5),
-                      ),
-                      const SizedBox(width: 10),
-                      StatusPill(status),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
 // ══════════════════════════ Today's tasks ══════════════════════════
 
 class _TodayTasks extends ConsumerWidget {
@@ -673,14 +664,17 @@ class _TodayTasks extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(dashboardMeProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox(height: 0),
+    return async.when(
+      loading: () => const _SectionPlaceholder(title: "Today's tasks", message: 'Loading…', loading: true),
+      error: (e, _) => _SectionPlaceholder(title: "Today's tasks", message: "Couldn't load — ${apiErrorMessage(e)}"),
       data: (d) {
         final tasks = (d['tasks'] is Map) ? (d['tasks'] as Map) : const {};
         final items = (tasks['items'] is List)
             ? (tasks['items'] as List).whereType<Map>().toList()
             : const <Map>[];
-        if (items.isEmpty) return const SizedBox(height: 0);
+        if (items.isEmpty) {
+          return const _SectionPlaceholder(title: "Today's tasks", message: 'Nothing assigned to you today.');
+        }
         final done = tasks['done'] ?? 0;
         final total = tasks['total'] ?? items.length;
 
@@ -732,7 +726,6 @@ class _TodayTasks extends ConsumerWidget {
                             Expanded(
                               child: Text(str(t['title'], 'Task'),
                                   style: TextStyle(
-                                      fontWeight: FontWeight.w600,
                                       fontSize: 12.5,
                                       decoration: isDone ? TextDecoration.lineThrough : null,
                                       color: isDone ? context.mutedColor : null)),
@@ -769,44 +762,72 @@ class _NextUpCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(dashboardMeProvider);
-    return async.maybeWhen(
-      orElse: () => const SizedBox(height: 0),
+    return async.when(
+      loading: () => const SizedBox(height: 0),
+      error: (e, _) => _NextUpBanner(
+        icon: Icons.error_outline_rounded,
+        title: "Next up: couldn't load",
+        subtitle: apiErrorMessage(e),
+      ),
       data: (d) {
         final next = d['next_up'];
-        if (next is! Map) return const SizedBox(height: 0);
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: M.lavenderBg, borderRadius: BorderRadius.circular(14)),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(color: M.lavenderIconBg, borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.event_repeat_rounded, size: 18, color: M.lavenderTitle),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Next up: ${str(next['subtitle'])}',
-                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: M.lavenderTitle)),
-                      Text(
-                        '${str(next['title'])} · ${time12(next['at'])}',
-                        style: const TextStyle(color: M.lavenderMuted, fontSize: 11),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+        if (next is! Map) {
+          return const _NextUpBanner(
+            icon: Icons.event_available_outlined,
+            title: 'Next up: nothing scheduled',
+            subtitle: 'No upcoming tasks or follow-ups.',
+          );
+        }
+        return _NextUpBanner(
+          icon: Icons.event_repeat_rounded,
+          title: 'Next up: ${str(next['subtitle'])}',
+          subtitle: '${str(next['title'])} · ${time12(next['at'])}',
         );
       },
+    );
+  }
+}
+
+class _NextUpBanner extends StatelessWidget {
+  const _NextUpBanner({required this.icon, required this.title, required this.subtitle});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: M.lavenderBg, borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: M.lavenderIconBg, borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, size: 18, color: M.lavenderTitle),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: M.lavenderTitle),
+                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: M.lavenderMuted, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

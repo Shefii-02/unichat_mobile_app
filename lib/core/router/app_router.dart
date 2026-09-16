@@ -31,6 +31,14 @@ import 'package:unichat_mobile_app/features/modules/account_pages.dart';
 import 'package:unichat_mobile_app/features/modules/growth_pages.dart';
 import 'package:unichat_mobile_app/features/modules/messaging_pages.dart';
 import 'package:unichat_mobile_app/features/modules/ops_pages.dart';
+import 'package:unichat_mobile_app/features/modules/hr_admin_page.dart';
+import 'package:unichat_mobile_app/features/modules/crm_extra_pages.dart';
+import 'package:unichat_mobile_app/features/modules/leads_extra_pages.dart';
+import 'package:unichat_mobile_app/features/modules/wa_chat_extra_pages.dart';
+import 'package:unichat_mobile_app/features/modules/wa_cloud_extra_pages.dart';
+import 'package:unichat_mobile_app/features/modules/wa_agent_extra_pages.dart';
+import 'package:unichat_mobile_app/features/modules/meta_ads_extra_pages.dart';
+import 'package:unichat_mobile_app/features/modules/instagram_extra_pages.dart';
 import 'package:unichat_mobile_app/features/target/target_page.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_page.dart';
 import 'package:unichat_mobile_app/features/payroll/payroll_page.dart';
@@ -112,7 +120,7 @@ Widget _pageForModuleRoute(String route) {
     case '/staff':
       return const StaffPage();
     case '/hr':
-      return const HrPage();
+      return const HrAdminPage();
     case '/otp-service':
       return const OtpServicePage();
     case '/forms':
@@ -129,6 +137,60 @@ Widget _pageForModuleRoute(String route) {
       return const SetupGuidePage();
     case '/superadmin':
       return const SuperAdminPage();
+    case '/deals':
+      return const DealsPage();
+    case '/crm-tasks':
+      return const CrmTasksAdminPage();
+    case '/calendar':
+      return const CalendarPage();
+    case '/labels':
+      return const LabelsPage();
+    case '/segments':
+      return const SegmentsPage();
+    case '/blacklist':
+      return const BlacklistPage();
+    case '/lead-categories':
+      return const LeadCategoriesPage();
+    case '/leads-by-staff':
+      return const LeadsByStaffPage();
+    case '/lead-logs':
+      return const LeadLogsPage();
+    case '/lead-summary':
+      return const LeadSummaryPage();
+    case '/lead-report':
+      return const LeadReportPage();
+    case '/assignment-queue':
+      return const AssignmentQueuePage();
+    case '/assignment-rules':
+      return const AssignmentRulesPage();
+    case '/wa-chat/automations':
+      return const AutomationRulesPage();
+    case '/wa-chat/analytics':
+      return const InboxAnalyticsPage();
+    case '/wa-chat/audit':
+      return const AuditAnalyticsPage();
+    case '/wa-cloud/settings':
+      return const WaCloudSettingsPage();
+    case '/wa-cloud/audit-log':
+      return const WaCloudAuditLogPage();
+    case '/message-logs':
+      return const MessageLogsPage();
+    case '/wa-agent/pipelines':
+      return const PipelinesPage();
+    case '/wa-agent/lead-intelligence':
+      return const LeadIntelligencePage();
+    case '/wa-agent/ai-config':
+      return const AiConfigPage();
+    case '/wa-agent/settings':
+      return const WaAgentAiSettingsPage();
+    case '/meta-ads/lead-ads':
+      return const LeadAdsPage();
+    case '/meta-ads/creative-studio':
+      return const CreativeStudioPage();
+    case '/instagram/comments':
+      return const InstagramCommentsPage();
+    case '/instagram/insights':
+      return const InstagramInsightsPage();
   }
   final module = AppModules.byRoute(route);
   if (module != null) return ModuleHubPage(module: module);
@@ -148,6 +210,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       .where((r) => !const {
             '/chats', '/leads', '/contacts', '/home',
             '/target', '/attendance', '/payroll', '/profile',
+            '/leads-by-staff',
           }.contains(r))
       .toSet();
 
@@ -182,15 +245,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
       }
 
-      // App lock: block every screen behind the device PIN/biometric until unlocked (or,
-      // if this device has never set one up, until setup is done) — checked before the
-      // attendance gate, since neither attendance data nor anything else should be
-      // reachable pre-unlock.
+      // App lock: block every screen behind the device PIN/biometric until unlocked — but
+      // only for a device that actually has an MPIN set up (it's opt-in via Settings, never
+      // forced). Checked before the attendance gate, since neither attendance data nor
+      // anything else should be reachable pre-unlock on a device that IS locked.
       if (loggedIn && loc != _appLockRoute) {
-        // Locked by default (see AppLockState.initial) until explicitly cleared by a
-        // successful unlock/setup — so this fails safe even before the first `refresh()`
-        // (which only fills in hasMpin/biometric info, see AppLockNotifier.refresh) resolves.
-        if (ref.read(appLockProvider).locked) {
+        final lockState = ref.read(appLockProvider);
+        // Fails safe before the first `refresh()` resolves (see AppLockNotifier.refresh) —
+        // block until we actually know whether this device has an MPIN at all.
+        if (!lockState.loaded) {
+          return '$_appLockRoute?from=${Uri.encodeComponent(state.uri.toString())}';
+        }
+        if (lockState.hasMpin && lockState.locked) {
           return '$_appLockRoute?from=${Uri.encodeComponent(state.uri.toString())}';
         }
       }
@@ -230,17 +296,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/home', builder: (_, __) => const HomePage()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/leads',
-              builder: (_, __) => const LeadsPage(),
-              routes: [
-                GoRoute(
-                  path: ':id',
-                  builder: (_, s) =>
-                      LeadDetailPage(id: int.parse(s.pathParameters['id']!)),
-                ),
-              ],
-            ),
+            GoRoute(path: '/leads', builder: (_, __) => const LeadsPage()),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/target', builder: (_, __) => const TargetPage()),
@@ -255,6 +311,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/profile', builder: (_, __) => const ProfilePage()),
           ]),
         ],
+      ),
+
+      // Lead detail is a full-screen sub-page, not part of the Leads tab's own
+      // nested Navigator — kept as a sibling of the shell (like /chats/:id and
+      // /contacts/:id below) so it doesn't inherit the bottom nav bar. Nesting
+      // it under the /leads branch route used to do exactly that.
+      GoRoute(
+        path: '/lead-detail/:id',
+        builder: (_, s) => LeadDetailPage(id: int.parse(s.pathParameters['id']!)),
       ),
 
       // Chats and Contacts lost their bottom-nav tab in the CRM staff-app nav
@@ -280,6 +345,19 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: ':id',
             builder: (_, s) =>
                 ContactDetailPage(id: int.parse(s.pathParameters['id']!)),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/leads-by-staff',
+        builder: (_, __) => const LeadsByStaffPage(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (_, s) => StaffLeadsPage(
+              staffId: int.parse(s.pathParameters['id']!),
+              staffName: s.uri.queryParameters['name'] ?? 'Staff',
+            ),
           ),
         ],
       ),

@@ -283,7 +283,7 @@ class _LeadsPageState extends State<LeadsPage> {
         : name.trim().split(' ').where((w) => w.isNotEmpty).map((w) => w[0].toUpperCase()).take(2).join();
 
     return InkWell(
-      onTap: () => context.push('/leads/${lead['id']}'),
+      onTap: () => context.push('/lead-detail/${lead['id']}'),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(

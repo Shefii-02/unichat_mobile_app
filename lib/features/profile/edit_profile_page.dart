@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
+import 'package:unichat_mobile_app/core/constants/api_constants.dart';
 import 'package:unichat_mobile_app/features/auth/data/models/user_model.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
@@ -108,7 +109,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     backgroundColor: M.heroAvatarBg,
                     backgroundImage: _newAvatar != null
                         ? FileImage(File(_newAvatar!.path)) as ImageProvider
-                        : (user.avatar != null && user.avatar!.isNotEmpty ? NetworkImage(user.avatar!) : null),
+                        : (resolveStorageUrl(user.avatar) != null
+                            ? NetworkImage(resolveStorageUrl(user.avatar)!)
+                            : null),
                     child: (_newAvatar == null && (user.avatar == null || user.avatar!.isEmpty))
                         ? Text(user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
                             style: const TextStyle(fontSize: 26, color: M.heroAvatarText))

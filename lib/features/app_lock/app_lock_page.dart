@@ -2,31 +2,64 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pinput/pinput.dart';
+import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
+import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 import 'app_lock_provider.dart';
 
 const _pinLength = 4;
 
 /// The one screen for both "set up app lock" (no MPIN yet) and "unlock" (MPIN exists,
-/// app is locked) — which one shows is entirely driven by [AppLockState], not a route
-/// argument, so it always reflects the true current state.
-class AppLockPage extends ConsumerWidget {
+/// app is locked). Which one shows is decided once — the first time [AppLockState.loaded]
+/// flips true — and then frozen for this page instance's lifetime: [_SetupOrResetView]
+/// calls `setPin`/`resetPin` partway through its own flow (to ask about enabling biometric
+/// *after* saving the PIN), which flips `hasMpin`/`justAuthenticated` in the provider — if
+/// this widget kept reacting to that live, it would swap out from under the setup view
+/// mid-flow and dispose its State while a dialog it opened was still awaiting a button tap.
+/// Only `context.go(redirectTo)` (called explicitly at the end of each view) ever leaves
+/// this page.
+class AppLockPage extends ConsumerStatefulWidget {
   const AppLockPage({super.key, this.redirectTo = '/home'});
   final String redirectTo;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppLockPage> createState() => _AppLockPageState();
+}
+
+class _AppLockPageState extends ConsumerState<AppLockPage> {
+  bool? _showUnlock;
+  bool _wasMpinSetAtEntry = false;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(appLockProvider);
     if (!state.loaded) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return Scaffold(
-      body: SafeArea(
-        child: state.hasMpin && !state.justAuthenticated
-            ? _UnlockView(redirectTo: redirectTo)
-            : _SetupOrResetView(redirectTo: redirectTo, isReset: state.hasMpin),
-      ),
-    );
+    if (!state.hasMpin) {
+      // This route is only ever reached pre-`loaded`, as a fail-safe while the provider is
+      // still resolving. Now that we know there's no MPIN, there's nothing to unlock or set
+      // up — bounce straight on. (The router's own redirect won't do this for us: it only
+      // fires when navigating *to* a new location, and we're already sitting on this one.)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go(widget.redirectTo);
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_showUnlock == null) {
+      _showUnlock = !state.justAuthenticated;
+      _wasMpinSetAtEntry = state.hasMpin;
+    }
+    // _UnlockView paints its own full-bleed gradient background (including behind the status
+    // bar) and manages its own SafeArea, so it isn't nested inside one here like the setup
+    // flow is.
+    return _showUnlock!
+        ? _UnlockView(redirectTo: widget.redirectTo)
+        : Scaffold(
+            body: SafeArea(
+              child: _SetupOrResetView(redirectTo: widget.redirectTo, isReset: _wasMpinSetAtEntry),
+            ),
+          );
   }
 }
 
@@ -76,55 +109,113 @@ class _UnlockViewState extends ConsumerState<_UnlockView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final biometricEnabled = ref.watch(appLockProvider.select((s) => s.biometricEnabled));
+    final name = ref.watch(authProvider).value?.name;
+    final firstName = (name == null || name.trim().isEmpty) ? null : name.trim().split(' ').first;
+
     final defaultPin = PinTheme(
       width: 52, height: 58,
-      textStyle: theme.textTheme.titleLarge,
+      textStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
       decoration: BoxDecoration(
-        color: context.altSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.lineColor),
+        color: Colors.white.withAlpha(25),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withAlpha(60)),
       ),
     );
 
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.lock_rounded, size: 44, color: theme.colorScheme.primary),
-            const SizedBox(height: 16),
-            Text('Enter your app lock PIN',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 24),
-            Pinput(
-              controller: _pinCtrl,
-              length: _pinLength,
-              obscureText: true,
-              enabled: !_busy,
-              defaultPinTheme: defaultPin,
-              focusedPinTheme: defaultPin.copyWith(
-                decoration: defaultPin.decoration!.copyWith(
-                  border: Border.all(color: theme.colorScheme.primary, width: 1.6),
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.primaryDark, AppColors.primary],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 76, height: 76,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(30),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Icon(Icons.lock_rounded, color: Colors.white, size: 40),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          firstName != null ? 'Welcome back, $firstName' : 'Welcome back',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text('Enter your PIN to continue',
+                            style: TextStyle(color: Colors.white70, fontSize: 13)),
+                        const SizedBox(height: 32),
+                        Pinput(
+                          controller: _pinCtrl,
+                          length: _pinLength,
+                          obscureText: true,
+                          enabled: !_busy,
+                          defaultPinTheme: defaultPin,
+                          focusedPinTheme: defaultPin.copyWith(
+                            decoration: defaultPin.decoration!.copyWith(
+                              border: Border.all(color: Colors.white, width: 1.6),
+                            ),
+                          ),
+                          onCompleted: _submit,
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 16),
+                          Text(_error!, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                        ],
+                        if (_busy) ...[
+                          const SizedBox(height: 20),
+                          const SizedBox(
+                            width: 22, height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              onCompleted: _submit,
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 14),
-              Text(_error!, style: const TextStyle(color: AppPalette.danger, fontSize: 13)),
+              // Pinned to the bottom, above the safe-area inset — biometric is a shortcut on
+              // top of the PIN above, never a replacement, so it always sits secondary to it.
+              if (biometricEnabled)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 28, top: 4),
+                  child: Column(
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(36),
+                        onTap: _tryBiometric,
+                        child: Container(
+                          width: 64, height: 64,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(30),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withAlpha(70)),
+                          ),
+                          child: const Icon(Icons.fingerprint_rounded, color: Colors.white, size: 34),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Use biometric', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
+                    ],
+                  ),
+                ),
             ],
-            if (biometricEnabled) ...[
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: _tryBiometric,
-                icon: const Icon(Icons.fingerprint_rounded),
-                label: const Text('Use biometric'),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -176,20 +267,20 @@ class _SetupOrResetViewState extends ConsumerState<_SetupOrResetView> {
       final enable = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
+        builder: (dialogCtx) => AlertDialog(
           title: const Text('Enable biometric unlock?'),
           content: const Text('Use your fingerprint or face to unlock faster. Your PIN still works as a backup.'),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Enable')),
+            TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: const Text('Not now')),
+            FilledButton(onPressed: () => Navigator.pop(dialogCtx, true), child: const Text('Enable')),
           ],
         ),
       );
       if (enable == true) {
-        final ok = await notifier.enableBiometric();
-        if (!ok && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Couldn't verify biometrics — you can enable this later in Settings.")));
+        final err = await notifier.enableBiometric();
+        if (err != null && mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('$err You can try again later in Settings.')));
         }
       }
     }

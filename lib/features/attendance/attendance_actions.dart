@@ -40,6 +40,12 @@ Future<bool> attendanceAction(
   final path = _attendancePaths[action];
   if (path == null) return false;
 
+  if (action == 'clock_out') {
+    if (!context.mounted) return false;
+    final confirmed = await _confirmClockOut(context);
+    if (!confirmed) return false;
+  }
+
   XFile? selfie;
   if (selfieRequiredFor(settings, action)) {
     if (!context.mounted) return false;
@@ -132,6 +138,39 @@ Future<bool> attendanceAction(
   }
 }
 
+/// Staff self-service "I accidentally clocked out" — the only door back in after a
+/// clock-out (one clock-in/out per day is enforced everywhere else), and it always needs a
+/// manager's approval before clock_out_at actually gets cleared (see
+/// AttendanceController::requestReopen / reviewReopen on the backend).
+Future<bool> requestAttendanceReopen(BuildContext context) async {
+  final reason = await _askReason(
+    context,
+    "This asks a manager to undo today's clock-out so you can clock in again. Explain what happened.",
+  );
+  if (reason == null || !context.mounted) return false;
+  try {
+    // Api.post unwraps the response's `data` key, which would swallow the sibling
+    // `auto_approved` flag alongside it — use the raw client to see both.
+    final res = await Api.raw.post('/hr/attendance/request-reopen', data: {'reason': reason});
+    final autoApproved = (res.data is Map) && (res.data as Map)['auto_approved'] == true;
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(autoApproved
+              ? "Reopened — you can clock in again now."
+              : 'Reopen request sent — waiting for a manager to review it.'),
+        ),
+      );
+    }
+    return true;
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+    }
+    return false;
+  }
+}
+
 Future<Position?> _bestEffortPosition() async {
   try {
     if (!await Geolocator.isLocationServiceEnabled()) return null;
@@ -152,6 +191,30 @@ Future<Position?> _bestEffortPosition() async {
   } catch (_) {
     return null;
   }
+}
+
+/// You can only clock in/out once per day (the backend rejects a second
+/// clock-in/out with "Already clocked in/out today"), and undoing a mistaken
+/// clock-out requires an admin to edit the record — so this is the one chance
+/// to catch a slip before it locks the day.
+Future<bool> _confirmClockOut(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Clock out for the day?'),
+      content: const Text(
+        'You can only clock in and out once per day. Once you clock out, you '
+        "won't be able to clock in again today without a manager approving a "
+        'reopen request. Make sure your shift is really over.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Submit')),
+      ],
+    ),
+  );
+  return ok ?? false;
 }
 
 Future<String?> _askReason(BuildContext context, String message) {

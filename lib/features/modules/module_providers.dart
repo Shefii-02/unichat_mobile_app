@@ -19,8 +19,28 @@ final metaCampaignsProvider =
 final metaInsightsOverviewProvider = FutureProvider((ref) => Api.one('/meta-ads/insights/overview'));
 final metaAudienceSetsProvider =
     FutureProvider((ref) => Api.list('/meta-ads/audience-sets'));
+// `Api.list`'s envelope-unwrapping only checks data/items/results/records/devices —
+// `/meta-ads/lead-forms` responds with `{forms: [...]}`, so unwrap it explicitly
+// (this provider was dead code before Lead Ads was built and had never caught this).
 final metaLeadFormsProvider =
-    FutureProvider((ref) => Api.list('/meta-ads/lead-forms'));
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await Api.one('/meta-ads/lead-forms');
+  final forms = res['forms'];
+  return forms is List
+      ? forms.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList()
+      : <Map<String, dynamic>>[];
+});
+final metaLeadsProvider = FutureProvider((ref) => Api.list('/meta-ads/leads'));
+final metaMediaLibraryProvider = FutureProvider((ref) => Api.list('/meta-ads/media'));
+// `/meta-ads/creatives` responds with `{creatives: [...]}` (non-paginated, bare envelope).
+final metaCreativesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await Api.one('/meta-ads/creatives');
+  final creatives = res['creatives'];
+  return creatives is List
+      ? creatives.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList()
+      : <Map<String, dynamic>>[];
+});
 
 // ── Instagram ───────────────────────────────────────────────────────────
 final igAccountsProvider =
@@ -29,6 +49,15 @@ final igConversationsProvider =
     FutureProvider((ref) => Api.list('/instagram/conversations'));
 final igAutomationsProvider =
     FutureProvider((ref) => Api.list('/instagram/automations'));
+final igAccountMediaProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, int>(
+        (ref, accountId) => Api.list('/instagram/accounts/$accountId/media'));
+final igAccountInsightsProvider =
+    FutureProvider.family<Map<String, dynamic>, int>((ref, accountId) async {
+  final res = await Api.one('/instagram/accounts/$accountId/insights');
+  final insights = res['insights'];
+  return insights is Map ? insights.cast<String, dynamic>() : <String, dynamic>{};
+});
 
 // ── Templates ───────────────────────────────────────────────────────────
 final waCloudTemplatesProvider =
@@ -92,10 +121,95 @@ final hrLeaveProvider =
 // the section on the equivalent client-side permission before watching this.
 final hrTeamAttendanceTodayProvider =
     FutureProvider((ref) => Api.list('/hr/attendance'));
+// Pending "I accidentally clocked out" requests awaiting a manager's decision.
+final hrReopenRequestsProvider =
+    FutureProvider((ref) => Api.list('/hr/attendance/reopen-requests'));
+
+// ── HR administration (hr.manage / staff.manage / hr.leave.approve) ────────
+final hrLeaveTeamProvider =
+    FutureProvider((ref) => Api.list('/hr/leave', query: {'scope': 'team'}));
+final hrSettingsProvider = FutureProvider((ref) => Api.one('/hr/settings'));
+final hrBreakTypesAdminProvider =
+    FutureProvider((ref) => Api.list('/hr/break-types'));
+final hrLeaveTypesAdminProvider =
+    FutureProvider((ref) => Api.list('/hr/leave-types'));
+final hrStaffProfilesProvider =
+    FutureProvider((ref) => Api.list('/hr/staff-profiles'));
+final hrIncentiveRulesProvider =
+    FutureProvider((ref) => Api.list('/hr/incentive-rules'));
+final hrIncentivesProvider =
+    FutureProvider((ref) => Api.list('/hr/incentives'));
+final hrSalesAdminProvider = FutureProvider((ref) => Api.list('/hr/sales'));
+final hrSalesSummaryProvider =
+    FutureProvider((ref) => Api.one('/hr/sales/summary'));
+final hrPayrollRunsProvider =
+    FutureProvider((ref) => Api.list('/hr/payroll/runs'));
 
 // ── CRM tasks ───────────────────────────────────────────────────────────
 final crmMyTasksProvider =
     FutureProvider((ref) => Api.list('/crm/tasks', query: {'mine': true}));
+final crmAllTasksProvider = FutureProvider((ref) => Api.list('/crm/tasks'));
+
+// ── CRM: deals / labels / segments / blacklist ─────────────────────────────
+final crmDealsProvider = FutureProvider((ref) => Api.list('/crm/deals'));
+// `Api.list`'s envelope-unwrapping only checks data/items/results/records/devices —
+// `/labels` responds with `{labels: [...]}`, so unwrap it explicitly here.
+final crmLabelsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await Api.one('/labels');
+  final labels = res['labels'];
+  return labels is List ? labels.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList() : <Map<String, dynamic>>[];
+});
+final crmSegmentsProvider = FutureProvider((ref) => Api.list('/crm/segments'));
+final blacklistProvider = FutureProvider((ref) => Api.list('/blacklist'));
+
+// ── Leads depth ─────────────────────────────────────────────────────────
+final leadCategoriesProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await Api.one('/lead-categories');
+  final list = res['categories'];
+  return list is List
+      ? list.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList()
+      : <Map<String, dynamic>>[];
+});
+final staffPerformanceProvider =
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await Api.one('/staff/performance');
+  final list = res['performance'];
+  return list is List
+      ? list.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList()
+      : <Map<String, dynamic>>[];
+});
+final leadSavedReportsProvider =
+    FutureProvider((ref) => Api.list('/leads/saved-reports'));
+final staffAvailabilityProvider =
+    FutureProvider((ref) => Api.list('/staff/availability'));
+final assignmentRuleProvider =
+    FutureProvider((ref) => Api.one('/lead-assignment-rules'));
+final workingHoursProvider = FutureProvider((ref) => Api.one('/working-hours'));
+
+// ── WA Chat: automation rules / inbox analytics ─────────────────────────
+// The `/wa-agent/automations` path is a WaChat-module feature (AutomationController)
+// despite the "wa-agent" prefix — separate from WA Cloud's own /wa-cloud/automations.
+final waChatAutomationRulesProvider =
+    FutureProvider((ref) => Api.list('/wa-agent/automations'));
+final waChatAnalyticsProvider = FutureProvider((ref) => Api.one('/wa-chat/analytics'));
+
+// ── WA Cloud: Meta credentials (Settings) ───────────────────────────────
+// `GET /settings` wraps the company under a `company` key (not `data`), so
+// `Api.one`'s single-level unwrap doesn't touch it — unwrap `company` here.
+// ── WA Agent: pipelines / lead intelligence / AI config / settings ──────
+final aiPipelinesProvider = FutureProvider((ref) => Api.list('/wa-agent/pipelines'));
+final metaAiStatsProvider = FutureProvider((ref) => Api.one('/meta-ai/stats'));
+final metaAiConfigProvider = FutureProvider((ref) => Api.one('/meta-ai/config'));
+final waAgentAiSettingsProvider = FutureProvider((ref) => Api.one('/wa-agent/ai-settings'));
+final waAgentAvailableModelsProvider = FutureProvider((ref) => Api.list('/wa-agent/available-models'));
+
+final waCloudSettingsProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
+  final res = await Api.one('/settings');
+  final company = res['company'];
+  return company is Map ? company.cast<String, dynamic>() : <String, dynamic>{};
+});
 
 // ── Staff ───────────────────────────────────────────────────────────────
 final staffListProvider =
@@ -163,7 +277,6 @@ final waAgentSessionsProvider =
     FutureProvider((ref) => Api.list('/wa-agent/sessions'));
 final waAgentPlaybookProvider =
     FutureProvider((ref) => Api.list('/wa-agent/playbook'));
-final waAgentAutomationsProvider = FutureProvider((ref) => Api.list('/wa-agent/automations'));
 
 // ── Widgets (website chat) ──────────────────────────────────────────────
 final chatWidgetsProvider =
