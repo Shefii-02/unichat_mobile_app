@@ -90,10 +90,15 @@ List<(String, String)> _flatten(Map<String, dynamic> d, [String prefix = '']) {
 // ══════════════════════════ Wallet & Plans ══════════════════════════
 
 class WalletPage extends StatelessWidget {
-  const WalletPage({super.key});
+  const WalletPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets the "Plan Billing" Quick Links tile (`/wallet?tab=2`) land directly on that tab.
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, 2),
       length: 3,
       child: Scaffold(
         appBar: AppBar(

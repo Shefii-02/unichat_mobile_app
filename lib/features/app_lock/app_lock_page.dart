@@ -9,15 +9,17 @@ import 'app_lock_provider.dart';
 
 const _pinLength = 4;
 
-/// The one screen for both "set up app lock" (no MPIN yet) and "unlock" (MPIN exists,
-/// app is locked). Which one shows is decided once — the first time [AppLockState.loaded]
-/// flips true — and then frozen for this page instance's lifetime: [_SetupOrResetView]
-/// calls `setPin`/`resetPin` partway through its own flow (to ask about enabling biometric
-/// *after* saving the PIN), which flips `hasMpin`/`justAuthenticated` in the provider — if
-/// this widget kept reacting to that live, it would swap out from under the setup view
-/// mid-flow and dispose its State while a dialog it opened was still awaiting a button tap.
-/// Only `context.go(redirectTo)` (called explicitly at the end of each view) ever leaves
-/// this page.
+/// The one screen for both "unlock" (MPIN exists, app is locked) and "reset the PIN without
+/// the old one" (MPIN exists, but the user just logged back in, proving identity another
+/// way) — first-time setup lives at `AppLockSetupPromptPage` instead, since that flow needs
+/// to be skippable and this one must not be. Which of the two shows here is decided once —
+/// the first time [AppLockState.loaded] flips true — and then frozen for this page
+/// instance's lifetime: [_SetupOrResetView] calls `resetPin` partway through its own flow
+/// (to ask about enabling biometric *after* saving the PIN), which flips `justAuthenticated`
+/// in the provider — if this widget kept reacting to that live, it would swap out from under
+/// the view mid-flow and dispose its State while a dialog it opened was still awaiting a
+/// button tap. Only `context.go(redirectTo)` (called explicitly at the end of each view)
+/// ever leaves this page.
 class AppLockPage extends ConsumerStatefulWidget {
   const AppLockPage({super.key, this.redirectTo = '/home'});
   final String redirectTo;
@@ -291,6 +293,15 @@ class _SetupOrResetViewState extends ConsumerState<_SetupOrResetView> {
     setState(() { _firstPin = null; _error = null; _pinCtrl.clear(); _confirmCtrl.clear(); });
   }
 
+  /// Skipping the post-login PIN reset turns app lock off entirely, rather than leaving the
+  /// old PIN in place — "Skip" here is a deliberate opt-out of app lock on this device, not
+  /// just "no thanks, I'll keep my old PIN." A future login is free to opt back in via the
+  /// first-time setup prompt or Settings.
+  Future<void> _skip() async {
+    await ref.read(appLockProvider.notifier).disableMpin();
+    if (mounted) context.go(widget.redirectTo);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -305,6 +316,22 @@ class _SetupOrResetViewState extends ConsumerState<_SetupOrResetView> {
     );
     final entering = _firstPin == null;
 
+    return Column(
+      children: [
+        if (widget.isReset)
+          Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8, top: 4),
+              child: TextButton(onPressed: _busy ? null : _skip, child: const Text('Skip')),
+            ),
+          ),
+        Expanded(child: _buildForm(context, theme, defaultPin, entering)),
+      ],
+    );
+  }
+
+  Widget _buildForm(BuildContext context, ThemeData theme, PinTheme defaultPin, bool entering) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -321,9 +348,14 @@ class _SetupOrResetViewState extends ConsumerState<_SetupOrResetView> {
             ),
             const SizedBox(height: 8),
             if (entering)
-              Text('A $_pinLength-digit PIN to quickly unlock Flowexa on this phone.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: context.mutedColor, fontSize: 13, height: 1.4)),
+              Text(
+                widget.isReset
+                    ? "You already have an app lock PIN on this phone. Set a new one now, "
+                        'or tap Skip above to turn app lock off entirely for this device.'
+                    : 'A $_pinLength-digit PIN to quickly unlock Flowexa on this phone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.mutedColor, fontSize: 13, height: 1.4),
+              ),
             const SizedBox(height: 24),
             if (entering)
               Pinput(

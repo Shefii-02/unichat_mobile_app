@@ -46,6 +46,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
     if (loggedIn) {
       // Confirm the linked device is still authorised before entering.
       final ok = await ref.read(authProvider.notifier).verifyDevice();
+
       if (!mounted) return;
       context.go(ok ? '/home' : '/auth');
       return;

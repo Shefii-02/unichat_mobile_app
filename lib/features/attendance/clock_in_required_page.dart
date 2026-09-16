@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
 import 'package:unichat_mobile_app/features/attendance/leave_request.dart';
@@ -25,6 +28,14 @@ class ClockInRequiredPage extends ConsumerWidget {
           ? (d['settings'] as Map).cast<String, dynamic>()
           : <String, dynamic>{},
       orElse: () => <String, dynamic>{},
+    );
+    final today = meAsync.maybeWhen(
+      data: (d) => (d['today'] is Map) ? (d['today'] as Map).cast<String, dynamic>() : null,
+      orElse: () => null,
+    );
+    final openBreak = meAsync.maybeWhen(
+      data: (d) => (d['open_break'] is Map) ? (d['open_break'] as Map).cast<String, dynamic>() : null,
+      orElse: () => null,
     );
     final from = GoRouterState.of(context).uri.queryParameters['from'];
 
@@ -84,6 +95,12 @@ class ClockInRequiredPage extends ConsumerWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _dateLabel(today),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: context.mutedColor, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     onBreak
@@ -91,6 +108,23 @@ class ClockInRequiredPage extends ConsumerWidget {
                         : "You need to clock in before you can use the app today.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: context.mutedColor, height: 1.4),
+                  ),
+                  SizedBox(height: onBreak ? 20 : 0),
+                  // Always present (never `if (...) ...` inserted/removed from this Column) —
+                  // `openBreak` comes from `meAsync`, a *different* async provider from `gate`
+                  // (already resolved by the time we reach this build, per the early-return
+                  // above) that can still be loading when this page first mounts. Inserting a
+                  // widget into the list the instant it resolves — at the same moment other
+                  // providers on other screens are also settling — is exactly what previously
+                  // tripped Flutter's semantics-flush assertion ("!semantics.parentDataDirty").
+                  // Visibility keeps the child in the tree throughout; only its visibility (and
+                  // the SizedBox height above) change with the data.
+                  Visibility(
+                    visible: onBreak && openBreak?['start_at'] != null,
+                    maintainState: true,
+                    maintainAnimation: true,
+                    maintainSize: false,
+                    child: _BreakInfoCard(startAt: (openBreak?['start_at'] as String?) ?? ''),
                   ),
                   const SizedBox(height: 28),
                   SizedBox(
@@ -129,7 +163,7 @@ class ClockInRequiredPage extends ConsumerWidget {
                       )) {
                         return;
                       }
-                      await ref.read(authProvider.notifier).logout();
+                      await ref.read(authProvider.notifier).logout(clearAppLock: true);
                     },
                     child: const Text('Sign out instead'),
                   ),
@@ -163,5 +197,101 @@ class ClockInRequiredPage extends ConsumerWidget {
     if (ok || !ref.read(attendanceGateProvider).blocks) {
       context.go((from != null && from.isNotEmpty) ? from : '/home');
     }
+  }
+}
+
+/// Prefers the server's own `work_date` for the row this gate is showing (so this never
+/// disagrees with the day the actual clock-in/break data belongs to), only falling back to
+/// the device's local date when there's no row yet at all (nothing clocked in today).
+String _dateLabel(Map<String, dynamic>? today) {
+  final raw = today?['work_date'];
+  final parsed = raw != null ? DateTime.tryParse('$raw') : null;
+  return DateFormat('EEEE, d MMMM').format(parsed ?? DateTime.now());
+}
+
+/// Break-in time plus a live-ticking "time on break so far" — reassures someone staring at
+/// this blocking screen that the app knows exactly when their break started and is counting,
+/// rather than just a static "you're on a break" with no numbers.
+class _BreakInfoCard extends StatefulWidget {
+  const _BreakInfoCard({required this.startAt});
+  final String startAt;
+
+  @override
+  State<_BreakInfoCard> createState() => _BreakInfoCardState();
+}
+
+class _BreakInfoCardState extends State<_BreakInfoCard> {
+  Timer? _ticker;
+  Duration _elapsed = Duration.zero;
+  DateTime? _start;
+
+  @override
+  void initState() {
+    super.initState();
+    _start = DateTime.tryParse(widget.startAt)?.toLocal();
+    _tick();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  void _tick() {
+    if (_start == null) return;
+    final elapsed = DateTime.now().difference(_start!);
+    if (mounted) setState(() => _elapsed = elapsed.isNegative ? Duration.zero : elapsed);
+  }
+
+  @override
+  void didUpdateWidget(covariant _BreakInfoCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.startAt != widget.startAt) {
+      _start = DateTime.tryParse(widget.startAt)?.toLocal();
+      _tick();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  String _hms(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: M.amberBg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          Column(
+            children: [
+              Text('Break in', style: TextStyle(fontSize: 11, color: M.amberMuted, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(time12(widget.startAt),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: M.amberTitle)),
+            ],
+          ),
+          Container(width: 1, height: 32, color: M.amberMuted.withValues(alpha: 0.25)),
+          Column(
+            children: [
+              Text('Total time', style: TextStyle(fontSize: 11, color: M.amberMuted, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(_hms(_elapsed),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: M.amberTitle)),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

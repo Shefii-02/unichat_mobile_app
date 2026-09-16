@@ -118,7 +118,7 @@ class ProfilePage extends ConsumerWidget {
                   _MenuItem(Icons.notifications_none_rounded, 'Notifications', onTap: () => context.push('/notifications')),
                   _MenuItem(Icons.headset_mic_outlined, 'Help and support', onTap: () => _comingSoon(context)),
                   _MenuItem(Icons.logout_rounded, 'Log out', danger: true,
-                      onTap: () => ref.read(authProvider.notifier).logout()),
+                      onTap: () => ref.read(authProvider.notifier).logout(clearAppLock: true)),
                 ],
               ),
               const SizedBox(height: 16),

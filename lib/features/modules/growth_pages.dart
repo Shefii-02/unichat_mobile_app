@@ -7,10 +7,16 @@ import '_shared.dart';
 // ══════════════════════════ Meta Ads ══════════════════════════
 
 class MetaAdsPage extends ConsumerWidget {
-  const MetaAdsPage({super.key});
+  const MetaAdsPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets Quick Links open straight on Insights (0) / Campaigns (1) / Audience Sets (2) /
+  /// Accounts (3).
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, 3),
       length: 4,
       child: Scaffold(
         appBar: AppBar(
@@ -205,10 +211,15 @@ class MetaAdsPage extends ConsumerWidget {
 // ══════════════════════════ Instagram ══════════════════════════
 
 class InstagramPage extends ConsumerWidget {
-  const InstagramPage({super.key});
+  const InstagramPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets Quick Links open straight on Inbox (0) / Automations (1) / Accounts (2).
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, 2),
       length: 3,
       child: Scaffold(
         appBar: AppBar(
@@ -492,10 +503,15 @@ class InstagramPage extends ConsumerWidget {
 // ══════════════════════════ WA Agent ══════════════════════════
 
 class WaAgentPage extends ConsumerWidget {
-  const WaAgentPage({super.key});
+  const WaAgentPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets Quick Links open straight on Stats (0) / Sessions (1) / Playbook (2).
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, 2),
       length: 3,
       child: Scaffold(
         appBar: AppBar(

@@ -11,10 +11,15 @@ import '_shared.dart';
 // ══════════════════════════ Staff & Roles ══════════════════════════
 
 class StaffPage extends ConsumerWidget {
-  const StaffPage({super.key});
+  const StaffPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets the "Roles" Quick Links tile (`/staff?tab=1`) land directly on that tab.
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, 1),
       length: 2,
       child: Scaffold(
         appBar: AppBar(

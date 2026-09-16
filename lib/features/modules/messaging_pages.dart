@@ -3,15 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'module_providers.dart';
 import 'ops_pages.dart' show pickAndUploadMedia;
+import 'wa_chat_extra_pages.dart' show WaContactsPage;
 import '_shared.dart';
 
 // ══════════════════════════ Templates ══════════════════════════
 
 class TemplatesPage extends ConsumerWidget {
-  const TemplatesPage({super.key});
+  const TemplatesPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets Quick Links open straight on "WA Templates" (tab 0) or "Templates" (tab 1).
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, 1),
       length: 2,
       child: Scaffold(
         appBar: AppBar(
@@ -127,34 +133,31 @@ class TemplatesPage extends ConsumerWidget {
 // ══════════════════════════ Phone Numbers / Sessions ══════════════════════════
 
 class SessionsPage extends ConsumerWidget {
-  const SessionsPage({super.key});
+  const SessionsPage({super.key, this.initialTabIndex = 0});
+
+  /// Which single view to show — 0 is "Sessions" (WA Chat's open-wa devices), 1 is "Phone
+  /// Numbers" (WA Cloud's official-API numbers). These are two distinct, unrelated concepts
+  /// that happen to live on one page; each Quick Links entry only ever shows its own one, not
+  /// a tab bar switching between both — Sessions never shows Cloud Numbers and vice versa.
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Phone Numbers'),
-          bottom: const TabBar(tabs: [
-            Tab(text: 'WA Sessions'),
-            Tab(text: 'Cloud Numbers'),
-          ]),
-        ),
-        floatingActionButton: Builder(
-          builder: (tabCtx) {
-            final idx = DefaultTabController.of(tabCtx).index;
-            return FloatingActionButton.extended(
-              onPressed: () => idx == 0
-                  ? _newSession(tabCtx, ref)
-                  : _newPhone(tabCtx, ref),
-              icon: const Icon(Icons.add_rounded),
-              label: Text(idx == 0 ? 'New session' : 'Add number'),
-            );
-          },
-        ),
-        body: TabBarView(children: [
-          ProviderList(
-            provider: wahaSessionsProvider,
+    final showCloudNumbers = initialTabIndex == 1;
+    return Scaffold(
+      appBar: AppBar(title: Text(showCloudNumbers ? 'Phone Numbers' : 'Sessions')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showCloudNumbers ? _newPhone(context, ref) : _newSession(context, ref),
+        icon: const Icon(Icons.add_rounded),
+        label: Text(showCloudNumbers ? 'Add number' : 'New session'),
+      ),
+      body: showCloudNumbers ? _cloudNumbersList(ref) : _sessionsList(ref),
+    );
+  }
+
+  Widget _sessionsList(WidgetRef ref) {
+    return ProviderList(
+      provider: wahaSessionsProvider,
             emptyLabel: 'No WhatsApp sessions',
             emptyIcon: Icons.smartphone_rounded,
             tile: (context, s) {
@@ -176,6 +179,25 @@ class SessionsPage extends ConsumerWidget {
                   children: [
                     StatusPill(str(s['status'], 'stopped')),
                     RowMenu(items: [
+                      if (connected)
+                        (
+                          'WA Contacts',
+                          Icons.contacts_rounded,
+                          () => Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => WaContactsPage(
+                                  sessionId: s['id'] as int,
+                                  sessionLabel: str(s['name'] ?? s['session'] ?? s['phone'], 'Session'),
+                                ),
+                              )),
+                        ),
+                      if (connected)
+                        (
+                          'Sync WA labels to CRM',
+                          Icons.label_rounded,
+                          () => runAction(context,
+                              () => Api.post('/waha/sessions/${s['id']}/labels/sync'),
+                              success: 'Labels synced — see them under Labels.'),
+                        ),
                       if (!connected)
                         (
                           'Start',
@@ -204,6 +226,12 @@ class SessionsPage extends ConsumerWidget {
                           Icons.qr_code_rounded,
                           () => _showQr(context, s),
                         ),
+                      if (!connected)
+                        (
+                          'Pairing code',
+                          Icons.dialpad_rounded,
+                          () => _requestPairingCode(context, s),
+                        ),
                       (
                         'Log out',
                         Icons.logout_rounded,
@@ -211,6 +239,22 @@ class SessionsPage extends ConsumerWidget {
                           final ok = await runAction(context,
                               () => Api.post('/waha/sessions/${s['id']}/logout'),
                               success: 'Logged out');
+                          if (ok) ref.invalidate(wahaSessionsProvider);
+                        }
+                      ),
+                      (
+                        'Force kill',
+                        Icons.power_off_rounded,
+                        () async {
+                          if (!await confirm(context,
+                              title: 'Force-kill this session?',
+                              message: 'Only use this if the session is stuck and Stop/Log out '
+                                  "aren't responding — it hard-kills the engine.",
+                              destructive: true,
+                              confirmLabel: 'Force kill')) { return; }
+                          final ok = await runAction(context,
+                              () => Api.post('/waha/sessions/${s['id']}/force-kill'),
+                              success: 'Session force-killed.');
                           if (ok) ref.invalidate(wahaSessionsProvider);
                         }
                       ),
@@ -233,8 +277,11 @@ class SessionsPage extends ConsumerWidget {
                 ),
               );
             },
-          ),
-          ProviderList(
+    );
+  }
+
+  Widget _cloudNumbersList(WidgetRef ref) {
+    return ProviderList(
             provider: phoneNumbersProvider,
             emptyLabel: 'No cloud numbers',
             emptyIcon: Icons.smartphone_rounded,
@@ -292,8 +339,65 @@ class SessionsPage extends ConsumerWidget {
                 ],
               ),
             ),
+    );
+  }
+
+  /// Alternative to scanning a QR (see [_showQr]) — the gateway issues an 8-char code the
+  /// user types into WhatsApp's own "Link with phone number" flow instead.
+  Future<void> _requestPairingCode(BuildContext context, Rec s) async {
+    final phoneCtrl = TextEditingController();
+    final phone = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Request pairing code'),
+        content: TextField(
+          controller: phoneCtrl,
+          autofocus: true,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            labelText: 'Phone number (with country code)',
+            hintText: 'e.g. 628123456789',
           ),
-        ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, phoneCtrl.text.trim()),
+            child: const Text('Request'),
+          ),
+        ],
+      ),
+    );
+    if (phone == null || phone.isEmpty || !context.mounted) return;
+
+    Rec res;
+    try {
+      res = await Api.post('/waha/sessions/${s['id']}/pairing-code', data: {'phoneNumber': phone});
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final code = res['code'] ?? res['pairingCode'] ?? res['value'];
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pairing code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Enter this code in WhatsApp → Linked devices → Link with phone number:',
+                style: TextStyle(color: ctx.mutedColor, fontSize: 13)),
+            const SizedBox(height: 12),
+            SelectableText('$code',
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: 4)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+        ],
       ),
     );
   }
@@ -464,10 +568,16 @@ class FlowBuilderPage extends ConsumerWidget {
 // ══════════════════════════ WA Cloud ══════════════════════════
 
 class WaCloudPage extends ConsumerWidget {
-  const WaCloudPage({super.key});
+  const WaCloudPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets Quick Links open straight on "Inbox Analytics" (tab 0) or "Agent Automations"
+  /// (tab 1).
+  final int initialTabIndex;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, 1),
       length: 2,
       child: Scaffold(
         appBar: AppBar(

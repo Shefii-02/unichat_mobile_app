@@ -1,26 +1,51 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/nav/app_modules.dart';
 import 'package:unichat_mobile_app/core/router/shell_routes.dart';
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
+import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 
 /// The full app catalogue — search, one-tap shortcuts and every module tile,
 /// grouped the same way the web app's 25-module blueprint is. This used to be
 /// the Home tab; Home itself is now a day-to-day CRM/HRMS dashboard and links
 /// in here for "everything else".
-class QuickActionsPage extends StatelessWidget {
+class QuickActionsPage extends StatefulWidget {
   const QuickActionsPage({super.key});
+
+  @override
+  State<QuickActionsPage> createState() => _QuickActionsPageState();
+}
+
+class _QuickActionsPageState extends State<QuickActionsPage> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Quick Actions')),
+      appBar: AppBar(
+        backgroundColor: M.heroBg,
+        foregroundColor: Colors.white,
+        title: const Text('Quick Links', style: TextStyle(color: Colors.white)),
+      ),
       body: CustomScrollView(
         slivers: [
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
-          const SliverToBoxAdapter(child: _SearchBar()),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          const SliverToBoxAdapter(child: _QuickActions()),
+          SliverToBoxAdapter(
+            child: _SearchBar(
+              controller: _searchCtrl,
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              onClear: () => setState(() {
+                _searchCtrl.clear();
+                _query = '';
+              }),
+            ),
+          ),
           const SliverToBoxAdapter(child: SizedBox(height: 8)),
           ..._moduleGroups(context),
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -29,19 +54,32 @@ class QuickActionsPage extends StatelessWidget {
     );
   }
 
+  /// Filters every section's own tiles down to ones matching [_query] by title/subtitle —
+  /// a section with zero matches disappears entirely (same as it already does when a company
+  /// simply can't see any of its tiles) rather than showing an empty heading.
   List<Widget> _moduleGroups(BuildContext context) {
     final out = <Widget>[];
+    var anyMatch = false;
     for (final group in AppModules.groupsWithContent) {
-      final mods = AppModules.visibleFor(group);
+      final mods = _query.isEmpty
+          ? AppModules.visibleFor(group)
+          : AppModules.visibleFor(group).where((m) {
+              return m.title.toLowerCase().contains(_query) ||
+                  (m.subtitle?.toLowerCase().contains(_query) ?? false);
+            }).toList();
+      if (mods.isEmpty) continue;
+      anyMatch = true;
       out.add(SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
           child: Text(
-            group.label,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.2),
+            group.label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: context.mutedColor,
+            ),
           ),
         ),
       ));
@@ -61,86 +99,67 @@ class QuickActionsPage extends StatelessWidget {
         ),
       ));
     }
+    if (!anyMatch && _query.isNotEmpty) {
+      out.add(SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 48),
+          child: Center(
+            child: Text('No matches for "$_query"',
+                style: TextStyle(color: context.mutedColor, fontSize: 13.5)),
+          ),
+        ),
+      ));
+    }
     return out;
   }
 }
 
 class _SearchBar extends StatelessWidget {
-  const _SearchBar();
+  const _SearchBar({required this.controller, required this.onChanged, required this.onClear});
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: GestureDetector(
-        onTap: () => context.push('/contacts'),
-        child: Container(
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: context.altSurface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: context.lineColor),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, color: context.mutedColor, size: 20),
-              const SizedBox(width: 10),
-              Text('Search contacts, chats, leads…',
-                  style: TextStyle(color: context.mutedColor, fontSize: 14)),
-            ],
-          ),
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: context.altSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: context.lineColor),
         ),
-      ),
-    );
-  }
-}
-
-class _QuickActions extends StatelessWidget {
-  const _QuickActions();
-
-  static const _actions = [
-    (Icons.add_comment_rounded, 'New chat', '/chats'),
-    (Icons.person_add_alt_1_rounded, 'New lead', '/leads'),
-    (Icons.campaign_rounded, 'Broadcast', '/message-sender'),
-    (Icons.qr_code_scanner_rounded, 'Scan', '/sessions'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: _actions.map((a) {
-          return Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () => context.goToRoute(a.$3),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(a.$1,
-                          color: theme.colorScheme.primary, size: 22),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(a.$2,
-                        style: const TextStyle(
-                            fontSize: 11.5, fontWeight: FontWeight.w600)),
-                  ],
+        child: Row(
+          children: [
+            Icon(Icons.search_rounded, color: context.mutedColor, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                onChanged: onChanged,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search WA Chat, Leads, HR…',
+                  hintStyle: TextStyle(color: context.mutedColor, fontSize: 14),
+                  border: InputBorder.none,
+                  isDense: true,
                 ),
               ),
             ),
-          );
-        }).toList(),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (_, value, __) => value.text.isEmpty
+                  ? const SizedBox.shrink()
+                  : InkWell(
+                      onTap: onClear,
+                      child: Icon(Icons.close_rounded, color: context.mutedColor, size: 18),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

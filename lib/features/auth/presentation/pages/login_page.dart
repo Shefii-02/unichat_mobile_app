@@ -53,7 +53,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       body: Column(
         children: [
           Container(
-            height: 220,
+            height: 250,
             width: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(

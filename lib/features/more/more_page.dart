@@ -69,7 +69,7 @@ class MorePage extends ConsumerWidget {
                 ),
               );
               if (ok == true) {
-                await ref.read(authProvider.notifier).logout();
+                await ref.read(authProvider.notifier).logout(clearAppLock: true);
               }
             },
           ),

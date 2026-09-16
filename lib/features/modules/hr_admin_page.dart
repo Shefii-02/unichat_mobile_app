@@ -11,7 +11,12 @@ import '_shared.dart';
 /// hr.leave.approve) — this page assumes the caller already passed the `/hr` module's own
 /// visibility check to get here.
 class HrAdminPage extends StatelessWidget {
-  const HrAdminPage({super.key});
+  const HrAdminPage({super.key, this.initialTabIndex = 0});
+
+  /// Lets a Quick Links tile (see AppModules — "Leave Requests", "Staff Setups", etc. each
+  /// deep-link straight to their own tab via `/hr?tab=N`) land directly on the right tab
+  /// instead of always opening on Attendance.
+  final int initialTabIndex;
 
   static const _tabs = [
     'Attendance', 'Leave', 'Payroll', 'Sales', 'Incentives', 'Staff Setup',
@@ -21,6 +26,7 @@ class HrAdminPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
+      initialIndex: initialTabIndex.clamp(0, _tabs.length - 1),
       length: _tabs.length,
       child: Scaffold(
         appBar: AppBar(

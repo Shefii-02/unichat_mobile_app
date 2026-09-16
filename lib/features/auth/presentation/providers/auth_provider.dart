@@ -73,9 +73,17 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     return true;
   }
 
-  Future<void> logout() async {
+  /// [clearAppLock] wipes the on-device MPIN/biometric too — pass `true` only for a
+  /// deliberate, user-initiated "Logout" (Settings' logout button), matching "I'm done with
+  /// this device/session, clear everything" the same way an app uninstall would. Left `false`
+  /// (the default) for the involuntary sign-outs [verifyDevice] triggers on cold start (dead
+  /// token, revoked device) — those happen silently to someone who never chose to log out,
+  /// so their app-lock PIN habit on this physical phone shouldn't get reset just because a
+  /// session quietly expired while they were away.
+  Future<void> logout({bool clearAppLock = false}) async {
     await ref.read(deviceAuthRepositoryProvider).logout();
     await ref.read(authRepositoryProvider).logout();
+    if (clearAppLock) await ref.read(appLockProvider.notifier).disableMpin();
     ref.read(attendanceGateProvider.notifier).clear();
     state = const AsyncData(null);
   }

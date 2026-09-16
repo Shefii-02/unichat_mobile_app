@@ -145,12 +145,26 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
       final q = search.toLowerCase();
       result = result.where((c) {
         final name = (c['contact_name'] as String? ?? c['name'] as String? ?? '').toLowerCase();
-        final msg  = (c['last_message']  as String? ?? '').toLowerCase();
+        final msg  = lastMessagePreview(c).toLowerCase();
         return name.contains(q) || msg.contains(q);
       }).toList();
     }
     return result;
   }
+}
+
+/// `last_message` on a conversation is the whole `WaMessage` row (Eloquent relation,
+/// snake-cased on serialize), not a plain string — `{content: {body}, type, ...}`. Reading
+/// it as `as String?` throws a cast error the instant a conversation actually has one.
+/// Non-text types (image/voice/video/etc.) already get a placeholder body like "[Image]"
+/// baked in server-side; the `type` fallback here only covers the rare case that's missing.
+String lastMessagePreview(Map<String, dynamic> conv) {
+  final last = conv['last_message'] as Map<String, dynamic>?;
+  if (last == null) return '';
+  final body = (last['content'] as Map<String, dynamic>?)?['body'] as String?;
+  if (body != null && body.isNotEmpty) return body;
+  final type = last['type'] as String?;
+  return (type != null && type != 'text') ? '[$type]' : '';
 }
 
 class _FilterChips extends StatelessWidget {
@@ -208,9 +222,12 @@ class _ChatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name    = conv['contact_name'] as String? ?? conv['name'] as String? ?? 'Unknown';
-    final lastMsg = conv['last_message']  as String? ?? '';
+    final lastMsg = lastMessagePreview(conv);
     final unread  = conv['unread_count']  as int?    ?? 0;
     final phone   = conv['phone']         as String? ?? '';
+    // The backend doesn't send `ai_handling` on conversation list rows today — this always
+    // evaluates false, which is why the "AI" filter chip never matches anything either
+    // (chatFilterProvider's 'ai' case above). Not a crash, just not wired up server-side yet.
     final isAi    = conv['ai_handling']   as bool?   ?? false;
     final rawTs   = conv['updated_at']    as String? ?? conv['last_message_at'] as String?;
     final ts      = rawTs != null ? DateTime.tryParse(rawTs) : null;

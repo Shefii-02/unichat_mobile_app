@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/nav/app_modules.dart';
 import 'package:unichat_mobile_app/core/widgets/stub_page.dart';
+import 'package:unichat_mobile_app/core/storage/local_storage.dart';
 import 'package:unichat_mobile_app/features/app_lock/app_lock_page.dart';
 import 'package:unichat_mobile_app/features/app_lock/app_lock_provider.dart';
+import 'package:unichat_mobile_app/features/app_lock/app_lock_setup_prompt_page.dart';
 import 'package:unichat_mobile_app/features/app_lock/change_mpin_page.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
 import 'package:unichat_mobile_app/features/attendance/clock_in_required_page.dart';
@@ -41,6 +43,7 @@ import 'package:unichat_mobile_app/features/modules/meta_ads_extra_pages.dart';
 import 'package:unichat_mobile_app/features/modules/instagram_extra_pages.dart';
 import 'package:unichat_mobile_app/features/target/target_page.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_page.dart';
+import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/payroll/payroll_page.dart';
 import 'package:unichat_mobile_app/features/profile/profile_page.dart';
 import 'package:unichat_mobile_app/features/profile/edit_profile_page.dart';
@@ -50,6 +53,13 @@ import 'shell/main_shell.dart';
 /// Listenable, so a redirect fires the instant any of them changes (e.g. once the
 /// attendance fetch kicked off inside `redirect` resolves) — and observes app lifecycle to
 /// re-lock (see AppLockNotifier.lock) whenever the app is backgrounded.
+///
+/// Deliberately has no client-side clock/timer logic for "did the day roll over" — the
+/// device's date is only ever used as a cheap trigger to ask again, never as the answer
+/// itself. The redirect's own attendance-gate check (below) compares `gate.fetchedForDate`
+/// against today on every single navigation and re-fetches `/hr/attendance/me` whenever
+/// they differ, so "is today already clocked in?" is always answered fresh by the server at
+/// the moment it actually matters, not by a timer guessing when midnight happened.
 class _AuthRouterNotifier extends ChangeNotifier with WidgetsBindingObserver {
   _AuthRouterNotifier(this._ref) {
     _ref.listen<AsyncValue<dynamic>>(authProvider, (_, __) => notifyListeners());
@@ -71,6 +81,11 @@ class _AuthRouterNotifier extends ChangeNotifier with WidgetsBindingObserver {
   void disposeObserver() => WidgetsBinding.instance.removeObserver(this);
 }
 
+String _todayKey() {
+  final now = DateTime.now();
+  return '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+}
+
 const _publicRoutes = {'/splash', '/onboarding', '/auth', '/login'};
 
 /// Every user must clock in once per day — and end any open break — before
@@ -78,14 +93,28 @@ const _publicRoutes = {'/splash', '/onboarding', '/auth', '/login'};
 /// notification). This is the only route exempt from that gate.
 const _gateExemptRoute = '/clock-in-required';
 
-/// Route for the app-lock screen (PIN/biometric unlock or first-time setup) — exempt from
-/// both the app-lock check itself (obviously) and the attendance gate, which must never be
-/// reachable before the app is unlocked.
+/// Route for the app-lock screen — PIN/biometric unlock, or (for an existing MPIN, right
+/// after a fresh login) a reset-without-the-old-PIN flow, since identity was just proven
+/// another way. First-time setup lives at [_appLockSetupRoute] instead. Exempt from both the
+/// app-lock check itself (obviously) and the attendance gate, which must never be reachable
+/// before the app is unlocked.
 const _appLockRoute = '/app-lock';
+
+/// The one-time, skippable "set up a PIN (and maybe biometric)" prompt shown right after a
+/// fresh login on a device with no MPIN yet — exempt from the same checks as [_appLockRoute]
+/// for the same reason.
+const _appLockSetupRoute = '/app-lock-setup';
+
+/// A page reached via `?tab=N` reads it here — used by every module that's really a single
+/// tabbed screen serving several distinct Quick Links entries (see AppModules: HR's 9
+/// sub-sections, Meta Ads' 4, Instagram's 3, and so on), rather than each needing its own
+/// route.
+int _tabIndex(GoRouterState state) =>
+    int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0;
 
 /// Routes that already have a bespoke mobile screen. Everything else in the
 /// module catalogue falls back to [ModuleHubPage].
-Widget _pageForModuleRoute(String route) {
+Widget _pageForModuleRoute(String route, GoRouterState state) {
   switch (route) {
     case '/message-sender':
       return const MessageSenderPage();
@@ -96,11 +125,11 @@ Widget _pageForModuleRoute(String route) {
     case '/reports':
       return const AnalyticsPage();
     case '/meta-ads':
-      return const MetaAdsPage();
+      return MetaAdsPage(initialTabIndex: _tabIndex(state));
     case '/instagram':
-      return const InstagramPage();
+      return InstagramPage(initialTabIndex: _tabIndex(state));
     case '/ai-agent':
-      return const WaAgentPage();
+      return WaAgentPage(initialTabIndex: _tabIndex(state));
     case '/widget':
       return const WidgetPage();
     case '/knowledge-base':
@@ -108,19 +137,19 @@ Widget _pageForModuleRoute(String route) {
     case '/listings':
       return const ListingsPage();
     case '/templates':
-      return const TemplatesPage();
+      return TemplatesPage(initialTabIndex: _tabIndex(state));
     case '/sessions':
-      return const SessionsPage();
+      return SessionsPage(initialTabIndex: _tabIndex(state));
     case '/flow-builder':
       return const FlowBuilderPage();
     case '/wa-cloud':
-      return const WaCloudPage();
+      return WaCloudPage(initialTabIndex: _tabIndex(state));
     case '/media-library':
       return const MediaLibraryPage();
     case '/staff':
-      return const StaffPage();
+      return StaffPage(initialTabIndex: _tabIndex(state));
     case '/hr':
-      return const HrAdminPage();
+      return HrAdminPage(initialTabIndex: _tabIndex(state));
     case '/otp-service':
       return const OtpServicePage();
     case '/forms':
@@ -204,9 +233,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     notifier.dispose();
   });
 
-  // Distinct module routes that are NOT served inside the bottom-nav shell.
+  // Distinct module routes that are NOT served inside the bottom-nav shell. Several
+  // catalogue entries deep-link into the same tabbed page with a different `?tab=N` query
+  // (e.g. every HR sub-section shares '/hr') — only the bare path needs its own GoRoute, so
+  // dedupe on that, not the full route-with-query string each AppModule carries.
   final moduleRoutes = AppModules.all
-      .map((m) => m.route)
+      .map((m) => m.route.split('?').first)
       .where((r) => !const {
             '/chats', '/leads', '/contacts', '/home',
             '/target', '/attendance', '/payroll', '/profile',
@@ -249,7 +281,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // only for a device that actually has an MPIN set up (it's opt-in via Settings, never
       // forced). Checked before the attendance gate, since neither attendance data nor
       // anything else should be reachable pre-unlock on a device that IS locked.
-      if (loggedIn && loc != _appLockRoute) {
+      if (loggedIn && loc != _appLockRoute && loc != _appLockSetupRoute) {
         final lockState = ref.read(appLockProvider);
         // Fails safe before the first `refresh()` resolves (see AppLockNotifier.refresh) —
         // block until we actually know whether this device has an MPIN at all.
@@ -259,16 +291,31 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (lockState.hasMpin && lockState.locked) {
           return '$_appLockRoute?from=${Uri.encodeComponent(state.uri.toString())}';
         }
+        // One-time, skippable "set up a PIN?" prompt for a device that's never had one and
+        // has never seen this prompt before (see AppLockSetupPromptPage) — fires once ever,
+        // right after whichever login got them here.
+        if (!lockState.hasMpin && !LocalStorage.getBool(LocalStorage.kAppLockSetupPromptSeen)) {
+          return '$_appLockSetupRoute?from=${Uri.encodeComponent(state.uri.toString())}';
+        }
       }
 
-      // Attendance gate: block every screen until today's clock-in (and any
-      // open break) is resolved. `loaded == false` means the fetch hasn't
-      // come back yet — route to the gate page too rather than flash the
-      // destination screen first; it kicks the fetch off itself.
-      if (loggedIn && loc != _gateExemptRoute && loc != _appLockRoute) {
+      // Attendance gate: block every screen until today's clock-in (and any open break) is
+      // resolved. `loaded == false` means the fetch hasn't come back yet; `fetchedForDate`
+      // not matching today means it came back for a day that has since passed (e.g. the app
+      // sat open, or merely backgrounded, across midnight) — both cases re-fetch
+      // `/hr/attendance/me` right here and route to the gate page, so "is today already
+      // clocked in?" is always answered by the server at the moment it actually matters,
+      // never assumed from a stale cache.
+      if (loggedIn && loc != _gateExemptRoute && loc != _appLockRoute && loc != _appLockSetupRoute) {
         final gate = ref.read(attendanceGateProvider);
-        if (!gate.loaded) {
+        if (!gate.loaded || gate.fetchedForDate != _todayKey()) {
           ref.read(attendanceGateProvider.notifier).refresh();
+          // The attendance card / dashboard aggregate are fetched once and cached until
+          // invalidated — they don't know the calendar rolled over on their own, so nudge
+          // them here too, at the same moment the gate itself notices.
+          ref.invalidate(hrAttendanceMeProvider);
+          ref.invalidate(dashboardMeProvider);
+          ref.invalidate(attendanceCalendarProvider);
           return '$_gateExemptRoute?from=${Uri.encodeComponent(state.uri.toString())}';
         }
         if (gate.blocks) {
@@ -371,12 +418,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: _appLockRoute,
         builder: (_, s) => AppLockPage(redirectTo: s.uri.queryParameters['from'] ?? '/home'),
       ),
+      GoRoute(
+        path: _appLockSetupRoute,
+        builder: (_, s) => AppLockSetupPromptPage(redirectTo: s.uri.queryParameters['from'] ?? '/home'),
+      ),
       GoRoute(path: '/change-mpin', builder: (_, __) => const ChangeMpinPage()),
       GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfilePage()),
 
       // One flat route per catalogue module.
       for (final route in moduleRoutes)
-        GoRoute(path: route, builder: (_, __) => _pageForModuleRoute(route)),
+        GoRoute(path: route, builder: (_, s) => _pageForModuleRoute(route, s)),
     ],
   );
 });

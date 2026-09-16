@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:unichat_mobile_app/core/storage/local_storage.dart';
-import 'package:unichat_mobile_app/features/app_lock/app_lock_provider.dart';
 
 /// The one persistent bottom-nav frame. Wraps a [StatefulNavigationShell] (see
 /// `StatefulShellRoute.indexedStack` in app_router.dart) — each tab keeps its own Navigator
@@ -28,12 +25,7 @@ class MainShell extends StatelessWidget {
     final idx = navigationShell.currentIndex;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          navigationShell,
-          const _AppLockHintNudge(),
-        ],
-      ),
+      body: navigationShell,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: idx,
         // Re-tapping the current tab resets it to its initial location (matching standard
@@ -59,45 +51,4 @@ class _Tab {
   final IconData icon;
   final IconData activeIcon;
   final String label;
-}
-
-/// Renders nothing — its only job is to show a one-time, dismissible heads-up (never a
-/// blocking dialog) that app lock / biometric login exist and can be turned on in Settings.
-/// Fires at most once ever per device install (tracked via [LocalStorage.kAppLockHintSeen]),
-/// and only when the user hasn't already set one up. This is the entire "first run" touch
-/// point for app lock — actual setup only ever happens if the user goes and opts in.
-class _AppLockHintNudge extends ConsumerStatefulWidget {
-  const _AppLockHintNudge();
-  @override
-  ConsumerState<_AppLockHintNudge> createState() => _AppLockHintNudgeState();
-}
-
-class _AppLockHintNudgeState extends ConsumerState<_AppLockHintNudge> {
-  bool _checked = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(appLockProvider);
-    if (!_checked && state.loaded) {
-      _checked = true;
-      final alreadySeen = LocalStorage.getBool(LocalStorage.kAppLockHintSeen);
-      if (!alreadySeen && !state.hasMpin) {
-        LocalStorage.setBool(LocalStorage.kAppLockHintSeen, true);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              duration: const Duration(seconds: 6),
-              content: const Text('Tip: you can set up an app lock PIN and biometric login anytime in Settings.'),
-              action: SnackBarAction(
-                label: 'Settings',
-                onPressed: () => context.push('/settings'),
-              ),
-            ),
-          );
-        });
-      }
-    }
-    return const SizedBox.shrink();
-  }
 }

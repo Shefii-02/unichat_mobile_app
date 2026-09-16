@@ -5,6 +5,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:pinput/pinput.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
+import 'package:unichat_mobile_app/core/services/system_ui_controller.dart';
+import 'package:unichat_mobile_app/core/storage/local_storage.dart';
 import 'package:unichat_mobile_app/core/theme/theme_provider.dart';
 import 'package:unichat_mobile_app/core/version/update_checker.dart';
 import 'package:unichat_mobile_app/core/widgets/app_avatar.dart';
@@ -73,7 +75,7 @@ class SettingsPage extends ConsumerWidget {
 
           const SizedBox(height: 8),
 
-          _section('Appearance', [const _ThemeTile()]),
+          _section('Appearance', [const _ThemeTile(), const _EdgeToEdgeTile()]),
 
           _section('Notifications', [const _NotificationPermissionTile(), const _NotificationSection()]),
 
@@ -157,7 +159,7 @@ class SettingsPage extends ConsumerWidget {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              ref.read(authProvider.notifier).logout();
+              ref.read(authProvider.notifier).logout(clearAppLock: true);
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Logout'),
@@ -248,6 +250,40 @@ class _ThemeTile extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Edge-to-edge draws app content behind the status bar / gesture nav bar, like most modern
+/// apps — but on a handful of phones, the gesture nav bar visually overlaps content when
+/// it's on. Rather than forcing one behavior for every device, this is a manual escape
+/// hatch: default on, and a user hitting that overlap issue on their specific phone can turn
+/// it off here. Takes effect immediately, no restart needed.
+class _EdgeToEdgeTile extends StatefulWidget {
+  const _EdgeToEdgeTile();
+  @override
+  State<_EdgeToEdgeTile> createState() => _EdgeToEdgeTileState();
+}
+
+class _EdgeToEdgeTileState extends State<_EdgeToEdgeTile> {
+  bool _enabled = LocalStorage.getBool(LocalStorage.kEdgeToEdge, defaultValue: true);
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.fullscreen_rounded, color: AppColors.textSecondary, size: 22),
+      title: const Text('Full-screen edge to edge', style: TextStyle(fontSize: 14)),
+      subtitle: const Text(
+        'App content draws behind the status/nav bar. Turn off if your phone\'s '
+        'gesture bar overlaps the app.',
+        style: TextStyle(fontSize: 11.5, color: AppColors.textLight),
+      ),
+      value: _enabled,
+      activeThumbColor: AppColors.primary,
+      onChanged: (v) {
+        setState(() => _enabled = v);
+        SystemUiController.setEnabled(v);
+      },
     );
   }
 }
