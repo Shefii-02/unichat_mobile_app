@@ -81,14 +81,24 @@ class AppModules {
   AppModules._();
 
   static const List<AppModule> all = [
-    // ── WA Chat: Sessions, Chats, Campaigns, Templates, API Services, Media Library,
-    // Automation, Inbox Analytics, Audit Analytics ─────────────────
+    // ── WA Chat: Dashboard, Sessions, Chats, Campaigns, Templates, API Services, Media
+    // Library, Automation, Inbox Analytics, Audit Analytics, Export ─────────────────
+    AppModule(
+      id: 'wa_chat_dashboard',
+      title: 'Dashboard',
+      subtitle: 'Sessions & message stats',
+      icon: Icons.dashboard_rounded,
+      route: '/wa-chat/dashboard',
+      group: ModuleGroup.waChat,
+      permission: 'sessions.view',
+      color: Color(0xFF0F766E),
+    ),
     AppModule(
       id: 'phone_numbers',
       title: 'Sessions',
       subtitle: 'Devices & lines',
       icon: Icons.smartphone_rounded,
-      route: '/sessions',
+      route: '/wa-chat/sessions',
       group: ModuleGroup.waChat,
       permission: 'sessions.view',
       color: Color(0xFF2E9CCA),
@@ -98,7 +108,7 @@ class AppModules {
       title: 'Chats',
       subtitle: 'Team inbox',
       icon: Icons.forum_rounded,
-      route: '/chats',
+      route: '/wa-chat/chats',
       group: ModuleGroup.waChat,
       permission: 'contacts.view',
       color: Color(0xFF25D366),
@@ -173,6 +183,16 @@ class AppModules {
       permission: 'contacts.view',
       color: Color(0xFF5C6570),
     ),
+    AppModule(
+      id: 'wa_chat_export',
+      title: 'Export',
+      subtitle: 'Chats, contacts & groups to CSV',
+      icon: Icons.download_rounded,
+      route: '/wa-chat/export',
+      group: ModuleGroup.waChat,
+      permission: 'reports.manage',
+      color: Color(0xFF64748B),
+    ),
 
     // ── WA Cloud: Phone Numbers, WA Templates, Survey Forms, API Services,
     // Agent Automations, Inbox, Settings, Inbox Analytics, Audit Logs, Message Logs ──
@@ -181,7 +201,7 @@ class AppModules {
       title: 'Phone Numbers',
       subtitle: 'Official API lines',
       icon: Icons.dialpad_rounded,
-      route: '/sessions?tab=1',
+      route: '/wa-cloud/phone-numbers',
       group: ModuleGroup.waCloud,
       permission: 'sessions.view',
       color: Color(0xFF2E9CCA),
@@ -231,7 +251,7 @@ class AppModules {
       title: 'Inbox',
       subtitle: 'Team inbox',
       icon: Icons.inbox_rounded,
-      route: '/chats',
+      route: '/wa-chat/chats',
       group: ModuleGroup.waCloud,
       permission: 'contacts.view',
       color: Color(0xFF25A9E0),

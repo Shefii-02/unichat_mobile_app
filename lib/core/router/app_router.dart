@@ -19,7 +19,6 @@ import 'package:unichat_mobile_app/features/home/home_page.dart';
 import 'package:unichat_mobile_app/features/quick_actions/quick_actions_page.dart';
 import 'package:unichat_mobile_app/features/hub/module_hub_page.dart';
 import 'package:unichat_mobile_app/features/chats/presentation/pages/chats_page.dart';
-import 'package:unichat_mobile_app/features/chats/presentation/pages/chat_detail_page.dart';
 import 'package:unichat_mobile_app/features/leads/presentation/pages/leads_page.dart';
 import 'package:unichat_mobile_app/features/leads/presentation/pages/lead_detail_page.dart';
 import 'package:unichat_mobile_app/features/contacts/presentation/pages/contacts_page.dart';
@@ -31,7 +30,12 @@ import 'package:unichat_mobile_app/features/more/more_page.dart';
 import 'package:unichat_mobile_app/features/message_sender/message_sender_page.dart';
 import 'package:unichat_mobile_app/features/modules/account_pages.dart';
 import 'package:unichat_mobile_app/features/modules/growth_pages.dart';
-import 'package:unichat_mobile_app/features/modules/messaging_pages.dart';
+import 'package:unichat_mobile_app/features/modules/templates_page.dart';
+import 'package:unichat_mobile_app/features/modules/wa_sessions_page.dart';
+import 'package:unichat_mobile_app/features/modules/cloud_phone_numbers_page.dart';
+import 'package:unichat_mobile_app/features/modules/flow_builder_page.dart';
+import 'package:unichat_mobile_app/features/modules/wa_cloud_page.dart';
+import 'package:unichat_mobile_app/features/modules/media_library_page.dart';
 import 'package:unichat_mobile_app/features/modules/ops_pages.dart';
 import 'package:unichat_mobile_app/features/modules/hr_admin_page.dart';
 import 'package:unichat_mobile_app/features/modules/crm_extra_pages.dart';
@@ -62,9 +66,14 @@ import 'shell/main_shell.dart';
 /// the moment it actually matters, not by a timer guessing when midnight happened.
 class _AuthRouterNotifier extends ChangeNotifier with WidgetsBindingObserver {
   _AuthRouterNotifier(this._ref) {
-    _ref.listen<AsyncValue<dynamic>>(authProvider, (_, __) => notifyListeners());
+    _ref.listen<AsyncValue<dynamic>>(
+      authProvider,
+      (_, __) => notifyListeners(),
+    );
     _ref.listen<AttendanceGateState>(
-        attendanceGateProvider, (_, __) => notifyListeners());
+      attendanceGateProvider,
+      (_, __) => notifyListeners(),
+    );
     _ref.listen<AppLockState>(appLockProvider, (_, __) => notifyListeners());
     WidgetsBinding.instance.addObserver(this);
   }
@@ -73,7 +82,8 @@ class _AuthRouterNotifier extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
       _ref.read(appLockProvider.notifier).lock();
     }
   }
@@ -138,8 +148,6 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const ListingsPage();
     case '/templates':
       return TemplatesPage(initialTabIndex: _tabIndex(state));
-    case '/sessions':
-      return SessionsPage(initialTabIndex: _tabIndex(state));
     case '/flow-builder':
       return const FlowBuilderPage();
     case '/wa-cloud':
@@ -192,12 +200,21 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const AssignmentQueuePage();
     case '/assignment-rules':
       return const AssignmentRulesPage();
+
+    case '/wa-chat/dashboard':
+      return const WaChatDashboardPage();
+    case '/wa-chat/sessions':
+      return const WaSessionsPage();
+    case '/wa-cloud/phone-numbers':
+      return const CloudPhoneNumbersPage();
     case '/wa-chat/automations':
       return const AutomationRulesPage();
     case '/wa-chat/analytics':
       return const InboxAnalyticsPage();
     case '/wa-chat/audit':
       return const AuditAnalyticsPage();
+    case '/wa-chat/export':
+      return const WaDataExportPage();
     case '/wa-cloud/settings':
       return const WaCloudSettingsPage();
     case '/wa-cloud/audit-log':
@@ -237,14 +254,24 @@ final routerProvider = Provider<GoRouter>((ref) {
   // catalogue entries deep-link into the same tabbed page with a different `?tab=N` query
   // (e.g. every HR sub-section shares '/hr') — only the bare path needs its own GoRoute, so
   // dedupe on that, not the full route-with-query string each AppModule carries.
-  final moduleRoutes = AppModules.all
-      .map((m) => m.route.split('?').first)
-      .where((r) => !const {
-            '/chats', '/leads', '/contacts', '/home',
-            '/target', '/attendance', '/payroll', '/profile',
-            '/leads-by-staff',
-          }.contains(r))
-      .toSet();
+  final moduleRoutes =
+      AppModules.all
+          .map((m) => m.route.split('?').first)
+          .where(
+            (r) =>
+                !const {
+                  '/wa-chat/chats',
+                  '/leads',
+                  '/contacts',
+                  '/home',
+                  '/target',
+                  '/attendance',
+                  '/payroll',
+                  '/profile',
+                  '/leads-by-staff',
+                }.contains(r),
+          )
+          .toSet();
 
   return GoRouter(
     initialLocation: '/splash',
@@ -260,7 +287,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isPublic = _publicRoutes.contains(loc);
 
       if (!loggedIn && !isPublic) return '/auth';
-      if (loggedIn && (loc == '/auth' || loc == '/login' || loc == '/onboarding')) {
+      if (loggedIn &&
+          (loc == '/auth' || loc == '/login' || loc == '/onboarding')) {
         return '/home';
       }
 
@@ -294,7 +322,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         // One-time, skippable "set up a PIN?" prompt for a device that's never had one and
         // has never seen this prompt before (see AppLockSetupPromptPage) — fires once ever,
         // right after whichever login got them here.
-        if (!lockState.hasMpin && !LocalStorage.getBool(LocalStorage.kAppLockSetupPromptSeen)) {
+        if (!lockState.hasMpin &&
+            !LocalStorage.getBool(LocalStorage.kAppLockSetupPromptSeen)) {
           return '$_appLockSetupRoute?from=${Uri.encodeComponent(state.uri.toString())}';
         }
       }
@@ -306,7 +335,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // `/hr/attendance/me` right here and route to the gate page, so "is today already
       // clocked in?" is always answered by the server at the moment it actually matters,
       // never assumed from a stale cache.
-      if (loggedIn && loc != _gateExemptRoute && loc != _appLockRoute && loc != _appLockSetupRoute) {
+      if (loggedIn &&
+          loc != _gateExemptRoute &&
+          loc != _appLockRoute &&
+          loc != _appLockSetupRoute) {
         final gate = ref.read(attendanceGateProvider);
         if (!gate.loaded || gate.fetchedForDate != _todayKey()) {
           ref.read(attendanceGateProvider.notifier).refresh();
@@ -337,26 +369,49 @@ final routerProvider = Provider<GoRouter>((ref) {
       // second bottom nav — on top instead of switching tabs. Tab switches must use
       // `context.go(route)` (routes to the branch, see MainShell.goBranch), never `.push`.
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) => MainShell(navigationShell: navigationShell),
+        builder:
+            (context, state, navigationShell) =>
+                MainShell(navigationShell: navigationShell),
         branches: [
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/home', builder: (_, __) => const HomePage()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/leads', builder: (_, __) => const LeadsPage()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/target', builder: (_, __) => const TargetPage()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/attendance', builder: (_, __) => const AttendancePage()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/payroll', builder: (_, __) => const PayrollPage()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/profile', builder: (_, __) => const ProfilePage()),
-          ]),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/home', builder: (_, __) => const HomePage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/leads', builder: (_, __) => const LeadsPage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/target', builder: (_, __) => const TargetPage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/attendance',
+                builder: (_, __) => const AttendancePage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/payroll',
+                builder: (_, __) => const PayrollPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/profile',
+                builder: (_, __) => const ProfilePage(),
+              ),
+            ],
+          ),
         ],
       ),
 
@@ -366,32 +421,27 @@ final routerProvider = Provider<GoRouter>((ref) {
       // it under the /leads branch route used to do exactly that.
       GoRoute(
         path: '/lead-detail/:id',
-        builder: (_, s) => LeadDetailPage(id: int.parse(s.pathParameters['id']!)),
+        builder:
+            (_, s) => LeadDetailPage(id: int.parse(s.pathParameters['id']!)),
       ),
 
       // Chats and Contacts lost their bottom-nav tab in the CRM staff-app nav
       // redesign — reached now via Home's quick actions / Profile menu instead,
       // pushed as flat routes (no persistent bottom nav while inside a chat).
-      GoRoute(
-        path: '/chats',
-        builder: (_, __) => const ChatsPage(),
-        routes: [
-          GoRoute(
-            path: ':id',
-            builder: (_, s) => ChatDetailPage(
-              conversationId: int.parse(s.pathParameters['id']!),
-            ),
-          ),
-        ],
-      ),
+      // ChatsPage is session-scoped (pick a WA session, see that session's live chats
+      // straight from the gateway — see wa-chat/pages/Chats.tsx on the web) and pushes
+      // straight to WaSessionChatRoomPage itself rather than a nested go_router route,
+      // since a chat's identity (WA JID) only makes sense alongside its session/api key.
+      GoRoute(path: '/wa-chat/chats', builder: (_, __) => const ChatsPage()),
       GoRoute(
         path: '/contacts',
         builder: (_, __) => const ContactsPage(),
         routes: [
           GoRoute(
             path: ':id',
-            builder: (_, s) =>
-                ContactDetailPage(id: int.parse(s.pathParameters['id']!)),
+            builder:
+                (_, s) =>
+                    ContactDetailPage(id: int.parse(s.pathParameters['id']!)),
           ),
         ],
       ),
@@ -401,29 +451,47 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: ':id',
-            builder: (_, s) => StaffLeadsPage(
-              staffId: int.parse(s.pathParameters['id']!),
-              staffName: s.uri.queryParameters['name'] ?? 'Staff',
-            ),
+            builder:
+                (_, s) => StaffLeadsPage(
+                  staffId: int.parse(s.pathParameters['id']!),
+                  staffName: s.uri.queryParameters['name'] ?? 'Staff',
+                ),
           ),
         ],
       ),
       GoRoute(path: '/more', builder: (_, __) => const MorePage()),
 
-      GoRoute(path: '/notifications', builder: (_, __) => const NotificationsPage()),
-      GoRoute(path: '/quick-actions', builder: (_, __) => const QuickActionsPage()),
       GoRoute(
-          path: _gateExemptRoute, builder: (_, __) => const ClockInRequiredPage()),
+        path: '/notifications',
+        builder: (_, __) => const NotificationsPage(),
+      ),
+      GoRoute(
+        path: '/quick-actions',
+        builder: (_, __) => const QuickActionsPage(),
+      ),
+      GoRoute(
+        path: _gateExemptRoute,
+        builder: (_, __) => const ClockInRequiredPage(),
+      ),
       GoRoute(
         path: _appLockRoute,
-        builder: (_, s) => AppLockPage(redirectTo: s.uri.queryParameters['from'] ?? '/home'),
+        builder:
+            (_, s) => AppLockPage(
+              redirectTo: s.uri.queryParameters['from'] ?? '/home',
+            ),
       ),
       GoRoute(
         path: _appLockSetupRoute,
-        builder: (_, s) => AppLockSetupPromptPage(redirectTo: s.uri.queryParameters['from'] ?? '/home'),
+        builder:
+            (_, s) => AppLockSetupPromptPage(
+              redirectTo: s.uri.queryParameters['from'] ?? '/home',
+            ),
       ),
       GoRoute(path: '/change-mpin', builder: (_, __) => const ChangeMpinPage()),
-      GoRoute(path: '/edit-profile', builder: (_, __) => const EditProfilePage()),
+      GoRoute(
+        path: '/edit-profile',
+        builder: (_, __) => const EditProfilePage(),
+      ),
 
       // One flat route per catalogue module.
       for (final route in moduleRoutes)

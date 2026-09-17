@@ -7,9 +7,12 @@
     <!-- QR device-login scanner (mobile_scanner) + attachments (image_picker) -->
     <uses-permission android:name="android.permission.CAMERA"/>
 
-    <!-- Attendance geofence check on clock in/out/break (geolocator) -->
+    <!-- Attendance geofence check on clock in/out/break (geolocator) + WA Chat location share -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- WA Chat voice-note recording (record) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <!-- Local notifications (flutter_local_notifications) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>

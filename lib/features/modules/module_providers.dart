@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/network/api.dart';
+import 'wa_chat_api.dart';
 
 /// Simple read-only endpoint providers shared by the module screens. Each is a
 /// `FutureProvider`; call `ref.invalidate(x)` to refresh.
@@ -69,7 +70,7 @@ final waChatTemplatesProvider =
 final phoneNumbersProvider =
     FutureProvider((ref) => Api.list('/phone-numbers'));
 final wahaSessionsProvider =
-    FutureProvider((ref) => Api.list('/waha/sessions'));
+    FutureProvider((ref) => WaChatApi.sessions());
 
 // ── HR ──────────────────────────────────────────────────────────────────
 final hrAttendanceMeProvider =
@@ -191,8 +192,8 @@ final workingHoursProvider = FutureProvider((ref) => Api.one('/working-hours'));
 // The `/wa-agent/automations` path is a WaChat-module feature (AutomationController)
 // despite the "wa-agent" prefix — separate from WA Cloud's own /wa-cloud/automations.
 final waChatAutomationRulesProvider =
-    FutureProvider((ref) => Api.list('/wa-agent/automations'));
-final waChatAnalyticsProvider = FutureProvider((ref) => Api.one('/wa-chat/analytics'));
+    FutureProvider((ref) => WaChatApi.automationRules());
+final waChatAnalyticsProvider = FutureProvider((ref) => WaChatApi.analyticsOverview());
 
 // ── WA Cloud: Meta credentials (Settings) ───────────────────────────────
 // `GET /settings` wraps the company under a `company` key (not `data`), so

@@ -142,7 +142,7 @@ class _SearchBar extends StatelessWidget {
                 onChanged: onChanged,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Search WA Chat, Leads, HR…',
+                  hintText: 'Search WA Chat, Cloud, Leads, HR…',
                   hintStyle: TextStyle(color: context.mutedColor, fontSize: 14),
                   border: InputBorder.none,
                   isDense: true,

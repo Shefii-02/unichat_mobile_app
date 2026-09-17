@@ -15,7 +15,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Flowexa uses Face ID to unlock the app and protect sensitive customer data.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Flowexa checks your location when you clock in/out or take a break, to confirm you're within the office radius.</string>
+	<string>Flowexa checks your location when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

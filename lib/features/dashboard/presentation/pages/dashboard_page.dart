@@ -180,7 +180,7 @@ class _StatsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final stats = statsAsync.value ?? {};
     final cards = <_StatCardData>[
-      _StatCardData(emoji: '💬', label: 'Chats',     value: stats['conversations'], color: AppColors.info,         route: '/chats'),
+      _StatCardData(emoji: '💬', label: 'Chats',     value: stats['conversations'], color: AppColors.info,         route: '/wa-chat/chats'),
       _StatCardData(emoji: '🎯', label: 'Leads',     value: stats['leads'],         color: AppColors.scoreWarm,   route: '/leads'),
       _StatCardData(emoji: '👥', label: 'Contacts',  value: stats['contacts'],      color: AppColors.primary,      route: '/contacts'),
       _StatCardData(emoji: '📢', label: 'Campaigns', value: stats['campaigns'],     color: AppColors.stagePayment, route: '/campaigns'),
@@ -216,7 +216,7 @@ class _StatCardWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shellRoutes = {'/chats', '/leads', '/contacts'};
+    final shellRoutes = {'/wa-chat/chats', '/leads', '/contacts'};
     return GestureDetector(
       onTap: () => shellRoutes.contains(data.route)
           ? context.go(data.route)
@@ -265,7 +265,7 @@ class _QuickActionsGrid extends StatelessWidget {
   const _QuickActionsGrid();
 
   static const _actions = [
-    _ActionItem(Icons.chat_bubble_outline, 'New Chat',    '/chats',          AppColors.primary,       true),
+    _ActionItem(Icons.chat_bubble_outline, 'New Chat',    '/wa-chat/chats',  AppColors.primary,       true),
     _ActionItem(Icons.person_add_outlined, 'Add Lead',    '/leads',          AppColors.scoreWarm,     true),
     _ActionItem(Icons.campaign_outlined,   'Campaign',    '/campaigns',      AppColors.stagePayment,  false),
     _ActionItem(Icons.send_outlined,       'Broadcast',   '/message-sender', AppColors.accent,        false),

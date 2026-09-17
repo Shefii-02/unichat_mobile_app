@@ -11,7 +11,7 @@ class HeartbeatService with WidgetsBindingObserver {
   final Ref _ref;
   Timer? _timer;
 
-  static const _interval = Duration(minutes: 5);
+  static const _interval = Duration(minutes: 10);
 
   void start() {
     WidgetsBinding.instance.addObserver(this);
