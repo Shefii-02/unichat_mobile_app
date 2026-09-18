@@ -368,6 +368,19 @@ class AppModules {
       permission: 'wa_agent.automations.view',
       color: Color(0xFF5C6570),
     ),
+    // Same /listings catalog as the 'listings' module above (Meta Ads/Instagram group) — the
+    // AI agent answers about and matches leads against this one company-wide catalog, so it's
+    // surfaced here too rather than duplicated as a separate feature.
+    AppModule(
+      id: 'wa_agent_catalog',
+      title: 'Catalog',
+      subtitle: 'Listings & products',
+      icon: Icons.inventory_2_rounded,
+      route: '/listings',
+      group: ModuleGroup.waAgents,
+      permission: 'catalog.view',
+      color: Color(0xFFEA580C),
+    ),
     AppModule(
       id: 'wa_agent_settings',
       title: 'Settings',
@@ -499,7 +512,7 @@ class AppModules {
       icon: Icons.inventory_2_rounded,
       route: '/listings',
       group: ModuleGroup.metaInstagram,
-      permission: 'listings.view',
+      permission: 'catalog.view',
       color: Color(0xFFEA580C),
     ),
 

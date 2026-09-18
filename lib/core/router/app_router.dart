@@ -55,6 +55,7 @@ import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/lead_int
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_logs_page.dart';
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/ai_config_page.dart';
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_ai_settings_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_catalog_page.dart';
 // Meta Ads
 import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_accounts_page.dart';
 import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_campaigns_page.dart';
@@ -62,7 +63,6 @@ import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_aud
 import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_ads_insights_page.dart';
 import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/lead_ads_page.dart';
 import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/creative_studio_page.dart';
-import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/listings_page.dart';
 // Instagram
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_inbox_page.dart';
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_automations_page.dart';
@@ -203,7 +203,7 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
     case '/knowledge-base':
       return const KnowledgeBasePage();
     case '/listings':
-      return const ListingsPage();
+      return const WaAgentCatalogPage();
     case '/flow-builder':
       return const FlowBuilderPage();
     case '/wa-cloud':
@@ -285,6 +285,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const MessageLogsPage();
     case '/wa-agent/pipelines':
       return const PipelinesPage();
+    case '/wa-agent/logs':
+      return const WaAgentLogsPage();
     case '/wa-agent/lead-intelligence':
       return const LeadIntelligencePage();
     case '/wa-agent/ai-config':
