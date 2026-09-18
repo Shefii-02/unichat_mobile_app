@@ -28,23 +28,86 @@ import 'package:unichat_mobile_app/features/notifications/presentation/pages/not
 import 'package:unichat_mobile_app/features/settings/presentation/pages/settings_page.dart';
 import 'package:unichat_mobile_app/features/more/more_page.dart';
 import 'package:unichat_mobile_app/features/message_sender/message_sender_page.dart';
-import 'package:unichat_mobile_app/features/modules/account_pages.dart';
-import 'package:unichat_mobile_app/features/modules/growth_pages.dart';
-import 'package:unichat_mobile_app/features/modules/templates_page.dart';
-import 'package:unichat_mobile_app/features/modules/wa_sessions_page.dart';
-import 'package:unichat_mobile_app/features/modules/cloud_phone_numbers_page.dart';
-import 'package:unichat_mobile_app/features/modules/flow_builder_page.dart';
-import 'package:unichat_mobile_app/features/modules/wa_cloud_page.dart';
-import 'package:unichat_mobile_app/features/modules/media_library_page.dart';
-import 'package:unichat_mobile_app/features/modules/ops_pages.dart';
-import 'package:unichat_mobile_app/features/modules/hr_admin_page.dart';
-import 'package:unichat_mobile_app/features/modules/crm_extra_pages.dart';
-import 'package:unichat_mobile_app/features/modules/leads_extra_pages.dart';
-import 'package:unichat_mobile_app/features/modules/wa_chat_extra_pages.dart';
-import 'package:unichat_mobile_app/features/modules/wa_cloud_extra_pages.dart';
-import 'package:unichat_mobile_app/features/modules/wa_agent_extra_pages.dart';
-import 'package:unichat_mobile_app/features/modules/meta_ads_extra_pages.dart';
-import 'package:unichat_mobile_app/features/modules/instagram_extra_pages.dart';
+// WA Chat
+import 'package:unichat_mobile_app/features/wa_chat/presentation/pages/wa_chat_dashboard_page.dart';
+import 'package:unichat_mobile_app/features/wa_chat/presentation/pages/wa_sessions_page.dart';
+import 'package:unichat_mobile_app/features/wa_chat/presentation/pages/automation_rules_page.dart';
+import 'package:unichat_mobile_app/features/wa_chat/presentation/pages/inbox_analytics_page.dart';
+import 'package:unichat_mobile_app/features/wa_chat/presentation/pages/audit_analytics_page.dart';
+import 'package:unichat_mobile_app/features/wa_chat/presentation/pages/wa_data_export_page.dart';
+import 'package:unichat_mobile_app/features/wa_chat/presentation/pages/wa_chat_templates_page.dart';
+// WA Cloud
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/cloud_phone_numbers_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_templates_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/survey_forms_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_automations_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_inbox_analytics_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_settings_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_audit_log_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/message_logs_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_api_service_page.dart';
+// WA Agent
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/knowledge_base_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/pipelines_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_ai_agents_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_playbooks_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/lead_intelligence_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_logs_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/ai_config_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_ai_settings_page.dart';
+// Meta Ads
+import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_accounts_page.dart';
+import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_campaigns_page.dart';
+import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_audience_sets_page.dart';
+import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/meta_ads_insights_page.dart';
+import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/lead_ads_page.dart';
+import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/creative_studio_page.dart';
+import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/listings_page.dart';
+// Instagram
+import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_inbox_page.dart';
+import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_automations_page.dart';
+import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_comments_page.dart';
+import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_insights_page.dart';
+// CRM & Sales
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/deals_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/crm_tasks_admin_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/calendar_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/labels_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/segments_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/blacklist_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_categories_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/leads_by_staff_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_logs_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_report_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/assignment_queue_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/assignment_rules_page.dart';
+// HR
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_attendance_all_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_leave_requests_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_payrolls_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_sales_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_incentives_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_staff_setup_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_break_types_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_leave_types_page.dart';
+import 'package:unichat_mobile_app/features/hr/presentation/pages/hr_office_page.dart';
+// Accounts
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/staff_team_page.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/roles_page.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/devices_page.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/wallet_page.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/plan_billing_page.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/setup_guide_page.dart';
+// Operations
+import 'package:unichat_mobile_app/features/operations/presentation/pages/flow_builder_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/media_library_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/otp_service_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/export_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/integrations_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/widget_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/analytics_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/lead_summary_page.dart';
+import 'package:unichat_mobile_app/features/operations/presentation/pages/superadmin_page.dart';
 import 'package:unichat_mobile_app/features/target/target_page.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_page.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
@@ -115,49 +178,40 @@ const _appLockRoute = '/app-lock';
 /// for the same reason.
 const _appLockSetupRoute = '/app-lock-setup';
 
-/// A page reached via `?tab=N` reads it here — used by every module that's really a single
-/// tabbed screen serving several distinct Quick Links entries (see AppModules: HR's 9
-/// sub-sections, Meta Ads' 4, Instagram's 3, and so on), rather than each needing its own
-/// route.
-int _tabIndex(GoRouterState state) =>
-    int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0;
-
 /// Routes that already have a bespoke mobile screen. Everything else in the
 /// module catalogue falls back to [ModuleHubPage].
 Widget _pageForModuleRoute(String route, GoRouterState state) {
   switch (route) {
-    case '/message-sender':
-      return const MessageSenderPage();
     case '/campaigns':
       return const CampaignsPage();
     case '/settings':
       return const SettingsPage();
     case '/reports':
       return const AnalyticsPage();
+    // Meta Ads / Instagram / WA Agent / WA Cloud / Templates / Staff / HR used to be one
+    // shared tabbed class each, picked with `?tab=N` — every former tab is now its own
+    // independent page/route (see AppModules and the cases below); the bare group path keeps
+    // only the tab-0 page (the one AppModules' un-suffixed entry already pointed at).
     case '/meta-ads':
-      return MetaAdsPage(initialTabIndex: _tabIndex(state));
+      return const MetaAdsInsightsPage();
     case '/instagram':
-      return InstagramPage(initialTabIndex: _tabIndex(state));
+      return const InstagramInboxPage();
     case '/ai-agent':
-      return WaAgentPage(initialTabIndex: _tabIndex(state));
+      return const WaAgentAiAgentsPage();
     case '/widget':
       return const WidgetPage();
     case '/knowledge-base':
       return const KnowledgeBasePage();
     case '/listings':
       return const ListingsPage();
-    case '/templates':
-      return TemplatesPage(initialTabIndex: _tabIndex(state));
     case '/flow-builder':
       return const FlowBuilderPage();
     case '/wa-cloud':
-      return WaCloudPage(initialTabIndex: _tabIndex(state));
+      return const WaCloudInboxAnalyticsPage();
     case '/media-library':
       return const MediaLibraryPage();
     case '/staff':
-      return StaffPage(initialTabIndex: _tabIndex(state));
-    case '/hr':
-      return HrAdminPage(initialTabIndex: _tabIndex(state));
+      return const StaffTeamPage();
     case '/otp-service':
       return const OtpServicePage();
     case '/forms':
@@ -168,6 +222,10 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const ExportPage();
     case '/wallet':
       return const WalletPage();
+    case '/account/roles':
+      return const RolesPage();
+    case '/account/plan-billing':
+      return const PlanBillingPage();
     case '/devices':
       return const DevicesPage();
     case '/setup-guide':
@@ -205,6 +263,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const WaChatDashboardPage();
     case '/wa-chat/sessions':
       return const WaSessionsPage();
+    case '/wa-chat/message-sender':
+      return const MessageSenderPage();
     case '/wa-cloud/phone-numbers':
       return const CloudPhoneNumbersPage();
     case '/wa-chat/automations':
@@ -217,6 +277,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const WaDataExportPage();
     case '/wa-cloud/settings':
       return const WaCloudSettingsPage();
+    case '/wa-cloud/otp-service':
+      return const WaCloudApiServicePage();
     case '/wa-cloud/audit-log':
       return const WaCloudAuditLogPage();
     case '/message-logs':
@@ -237,6 +299,42 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const InstagramCommentsPage();
     case '/instagram/insights':
       return const InstagramInsightsPage();
+    case '/instagram/automations':
+      return const InstagramAutomationsPage();
+    case '/wa-agent/playbooks':
+      return const WaAgentPlaybooksPage();
+    case '/wa-chat/templates':
+      return const WaChatTemplatesPage();
+    case '/wa-cloud/templates':
+      return const WaCloudTemplatesPage();
+    case '/wa-cloud/automations':
+      return const WaCloudAutomationsPage();
+    case '/meta-ads/accounts':
+      return const MetaAccountsPage();
+    case '/meta-ads/campaigns':
+      return const MetaCampaignsPage();
+    case '/meta-ads/audience-sets':
+      return const MetaAudienceSetsPage();
+
+    // HR — each of the former HrAdminPage's 9 tabs is now its own page/route.
+    case '/hr/attendance-all':
+      return const HrAttendanceAllPage();
+    case '/hr/leave-requests':
+      return const HrLeaveRequestsPage();
+    case '/hr/payrolls':
+      return const HrPayrollsPage();
+    case '/hr/sales':
+      return const HrSalesPage();
+    case '/hr/incentives':
+      return const HrIncentivesPage();
+    case '/hr/staff-setup':
+      return const HrStaffSetupPage();
+    case '/hr/break-types':
+      return const HrBreakTypesPage();
+    case '/hr/leave-types':
+      return const HrLeaveTypesPage();
+    case '/hr/office':
+      return const HrOfficePage();
   }
   final module = AppModules.byRoute(route);
   if (module != null) return ModuleHubPage(module: module);

@@ -10,6 +10,7 @@ import 'package:unichat_mobile_app/features/chats/presentation/pages/wa_session_
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/modules/wa_chat_api.dart';
+import 'package:unichat_mobile_app/features/search/presentation/pages/global_search_page.dart';
 
 /// WA Chat's "Chats" — mirrors frontend/src/pages/wa-chat/pages/Chats.tsx exactly: pick a
 /// connected WhatsApp session first (a chat only exists *within* one session's account), then
@@ -39,7 +40,28 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
   // refresh itself just because the company's wa_chat_token changed server-side, so this
   // overrides it locally rather than requiring a full re-login to pick the new key up.
   String? _apiKeyOverride;
+  // Reconnecting mints a fresh gateway key AND REVOKES THE OLD ONE, INSTANTLY (WaChatTokenService::
+  // provision — no grace period, and it force-evicts the other key's live WebSocket too), and that
+  // key is shared by every client on the company's account — the web app, other devices, anyone
+  // else's open session. This used to auto-fire on a 401 as well as a missing key; that was reverted
+  // after learning `WaChatShell.tsx` on the web side tried the exact same thing before and reverted
+  // it (see its own comment), because it can silently revoke the token a concurrently-open web tab
+  // is actively using, kicking it with no warning and no self-heal on that side. Now only the missing-
+  // key case auto-fires (see _loadChats) — that one mints the FIRST key, so there is no existing
+  // client to kick. A 401 (existing key rejected) always falls back to the manual "Reconnect WA Chat"
+  // button, matching the web app's own deliberate behavior. This flag now only guards the
+  // missing-key case, still capped to one attempt per session selection.
+  bool _autoReconnectTried = false;
   Map<String, String?> _pictures = {};
+
+  // `getChats` is a heavy gateway read (it serializes a whole chat list across the WhatsApp engine's
+  // Chromium/CDP bridge) that can starve a DIFFERENT session's liveness probe long enough for the
+  // gateway to disconnect it — refiring it on every session switch or pull-to-refresh made this app
+  // the bigger trigger of that. Cached per session for 60s, mirroring the same discipline
+  // frontend/src/pages/wa-chat/pages/Chats.tsx already applies (`staleTime: 60_000`). An explicit
+  // pull-to-refresh still always hits the network — see the `force` param on _loadChats.
+  static const _chatsStaleTtl = Duration(seconds: 60);
+  final Map<String, (List<Rec>, DateTime)> _chatsCache = {};
 
   @override
   void dispose() {
@@ -62,26 +84,36 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
       await _loadChats();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _reconnecting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Couldn't reconnect — ${apiErrorMessage(e)}")));
+      // Surfaced in the body (not just a snackbar) since this can now fire silently on page
+      // open via the auto-reconnect below — a toast alone could come and go unnoticed, leaving
+      // the user stuck on a dead loading state with no visible explanation.
+      setState(() {
+        _reconnecting = false;
+        _loadingChats = false;
+        _authError = true;
+        _chatsError = "Couldn't reconnect — ${apiErrorMessage(e)}";
+      });
     }
   }
 
   Future<void> _selectSession(Rec s) async {
-    setState(() { _session = s; _loadingChats = true; _chatsError = null; _chats = []; });
+    setState(() { _session = s; _loadingChats = true; _chatsError = null; _chats = []; _autoReconnectTried = false; });
     await _loadChats();
   }
 
-  Future<void> _loadChats() async {
+  Future<void> _loadChats({bool force = false}) async {
     final session = _session;
     final apiKey = _apiKey;
     if (session == null) return;
     if (apiKey == null || apiKey.isEmpty) {
-      // Was previously a silent early-return here, which left `_loadingChats` stuck `true`
-      // forever (set by _selectSession just before calling this) — the whole page just sat
-      // on its loading spinner with no way to tell why, since nothing ever surfaced that the
-      // company has no WA Chat gateway key provisioned yet.
+      // No gateway key provisioned yet — reconnecting mints the first one, so there's no
+      // "kick other clients" risk here (see _autoReconnectTried) and it's safe to always try
+      // automatically rather than making the user find and tap "Reconnect WA Chat" themselves.
+      if (!_autoReconnectTried) {
+        _autoReconnectTried = true;
+        await _reconnectApiKey();
+        return;
+      }
       setState(() {
         _loadingChats = false;
         _authError = true;
@@ -97,23 +129,27 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
       });
       return;
     }
+    final cached = _chatsCache[sessionName];
+    if (!force && cached != null && DateTime.now().difference(cached.$2) < _chatsStaleTtl) {
+      setState(() { _chats = cached.$1; _loadingChats = false; _chatsError = null; _authError = false; });
+      return;
+    }
+
     setState(() { _loadingChats = true; _chatsError = null; _authError = false; });
     try {
       final chats = await WaChatApiService.getChats(sessionName, apiKey);
       chats.sort((a, b) => (num.tryParse('${b['timestamp'] ?? 0}') ?? 0)
           .compareTo(num.tryParse('${a['timestamp'] ?? 0}') ?? 0));
       if (!mounted) return;
+      _chatsCache[sessionName] = (chats, DateTime.now());
       setState(() { _chats = chats; _loadingChats = false; });
       _loadPictures(sessionName, apiKey, chats);
     } catch (e) {
       if (!mounted) return;
       // An expired/revoked token surfaces as a 401 from the gateway. Deliberately NOT
-      // auto-reconnected: reconnecting mints a fresh gateway key AND REVOKES THE OLD ONE
-      // (WaChatTokenService::provision), and this key is shared by every client on the
-      // company's account — the web app, other devices, anyone else's open session. Firing
-      // that automatically the moment any one client sees a transient 401 kicks every other
-      // concurrently-open client off, including ones whose key was actually still fine. Show
-      // the manual "Reconnect WA Chat" button instead and let a human decide.
+      // auto-reconnected — reconnecting revokes the shared key instantly and can kick a
+      // concurrently-open web tab with no warning (see the note on _autoReconnectTried above).
+      // Show the manual "Reconnect WA Chat" button and let a human decide, matching the web app.
       final unauthorized = e is DioException && e.response?.statusCode == 401;
       setState(() { _chatsError = apiErrorMessage(e); _loadingChats = false; _authError = unauthorized; });
     }
@@ -154,7 +190,9 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
         isGroup: chat['isGroup'] == true,
         allChats: _chats,
       ),
-    )).then((_) => _loadChats());
+    // Forced: the user likely just read/sent messages in there, so the cached unread counts and
+    // last-message previews are now stale on purpose, not just past their 60s TTL.
+    )).then((_) => _loadChats(force: true));
   }
 
   _ChatTab _tab = _ChatTab.all;
@@ -198,6 +236,19 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
         backgroundColor: AppColors.primaryDark,
         elevation: 0,
         title: const Text('Chats', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+        actions: [
+          if (_session != null)
+            IconButton(
+              tooltip: 'Search messages',
+              icon: const Icon(Icons.search_rounded, color: Colors.white),
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => GlobalSearchPage(
+                  initialSessionId: str(_session!['session_name'], ''),
+                  initialSessionLabel: str(_session!['display_name'] ?? _session!['phone'] ?? _session!['session_name'], 'this session'),
+                ),
+              )),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -277,7 +328,7 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
                       : const Text('Reconnect WA Chat'),
                 )
               else
-                OutlinedButton(onPressed: _loadChats, child: const Text('Retry')),
+                OutlinedButton(onPressed: () => _loadChats(force: true), child: const Text('Retry')),
             ],
           ),
         ),
@@ -288,7 +339,7 @@ class _ChatsPageState extends ConsumerState<ChatsPage> {
       return const Center(child: Text('No chats yet', style: TextStyle(color: AppColors.textLight)));
     }
     return RefreshIndicator(
-      onRefresh: _loadChats,
+      onRefresh: () => _loadChats(force: true),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: chats.length,

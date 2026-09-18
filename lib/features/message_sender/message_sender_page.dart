@@ -1,126 +1,55 @@
 import 'package:flutter/material.dart';
-import 'package:unichat_mobile_app/core/constants/app_colors.dart';
-import 'package:unichat_mobile_app/core/network/dio_client.dart';
-import 'package:unichat_mobile_app/core/widgets/app_button.dart';
+import 'package:unichat_mobile_app/features/message_sender/campaign_composer.dart';
+import 'package:unichat_mobile_app/features/message_sender/campaign_history_tab.dart';
 
+/// WA Chat's "Campaigns" quick link — mirrors
+/// frontend/src/pages/wa-chat/pages/message-sender/index.tsx's "📨 Campaign" / "🕐 History" tabs.
+/// Reached via the `/message-sender` route (AppModule id `message_sender`, WA Chat group) —
+/// unrelated to the separate, generic `/campaigns` CRM feature.
 class MessageSenderPage extends StatefulWidget {
   const MessageSenderPage({super.key});
   @override
   State<MessageSenderPage> createState() => _MessageSenderPageState();
 }
 
-class _MessageSenderPageState extends State<MessageSenderPage> with SingleTickerProviderStateMixin {
-  late TabController _tabs;
-  final _msgCtrl = TextEditingController();
-  List<dynamic> _contacts = [];
-  final List<int> _selected = [];
-  bool _sending = false;
-  double _progress = 0;
+enum _PageTab { campaign, history }
 
-  @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 3, vsync: this);
-    _loadContacts();
-  }
-
-  Future<void> _loadContacts() async {
-    try {
-      final res = await DioClient.laravelDio.get('/contacts', queryParameters: {'per_page': 50});
-      final data = res.data as Map<String, dynamic>;
-      if (mounted) setState(() => _contacts = (data['data'] as List?) ?? []);
-    } catch (_) {}
-  }
-
-  Future<void> _send() async {
-    if (_selected.isEmpty || _msgCtrl.text.trim().isEmpty) return;
-    setState(() { _sending = true; _progress = 0; });
-    for (int i = 0; i < _selected.length; i++) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted) setState(() => _progress = (i + 1) / _selected.length);
-    }
-    if (mounted) {
-      setState(() => _sending = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sent to ${_selected.length} contacts ✅')),
-      );
-    }
-  }
-
-  @override
-  void dispose() { _tabs.dispose(); _msgCtrl.dispose(); super.dispose(); }
+class _MessageSenderPageState extends State<MessageSenderPage> {
+  _PageTab _tab = _PageTab.campaign;
+  // Bumped after a successful send so the History tab (keyed on this) remounts and reloads —
+  // simpler than wiring a shared refresh callback through to a widget that may not be built yet.
+  int _historyRefreshTick = 0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Message Sender'),
-        bottom: TabBar(
-          controller: _tabs,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          indicatorColor: AppColors.primaryLight,
-          tabs: const [Tab(text: 'Personal'), Tab(text: 'Group'), Tab(text: 'Bulk CSV')],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabs,
-        children: [_personalTab(), _groupTab(), _bulkTab()],
-      ),
-    );
-  }
-
-  Widget _personalTab() {
-    return Column(
-      children: [
-        if (_sending) ...[
-          LinearProgressIndicator(value: _progress, backgroundColor: AppColors.bgGray, valueColor: const AlwaysStoppedAnimation(AppColors.primary), minHeight: 4),
+      appBar: AppBar(title: const Text('Wa Campaigns')),
+      body: Column(
+        children: [
           Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text('Sending... ${(_progress * _selected.length).toInt()} / ${_selected.length}',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: SegmentedButton<_PageTab>(
+              segments: const [
+                ButtonSegment(value: _PageTab.campaign, label: Text('📨 Campaign')),
+                ButtonSegment(value: _PageTab.history, label: Text('🕐 History')),
+              ],
+              selected: {_tab},
+              onSelectionChanged: (s) => setState(() => _tab = s.first),
+            ),
+          ),
+          Expanded(
+            child: IndexedStack(
+              index: _tab == _PageTab.campaign ? 0 : 1,
+              children: [
+                CampaignComposer(
+                  onSent: () => setState(() { _tab = _PageTab.history; _historyRefreshTick++; }),
+                ),
+                CampaignHistoryTab(key: ValueKey(_historyRefreshTick)),
+              ],
+            ),
           ),
         ],
-        Expanded(
-          child: ListView.builder(
-            itemCount: _contacts.length,
-            itemBuilder: (_, i) {
-              final c   = _contacts[i];
-              final id  = c['id'] as int;
-              final sel = _selected.contains(id);
-              return CheckboxListTile(
-                value: sel,
-                onChanged: (_) => setState(() => sel ? _selected.remove(id) : _selected.add(id)),
-                title: Text(c['name'] as String? ?? 'Unknown'),
-                subtitle: Text(c['phone'] as String? ?? ''),
-                activeColor: AppColors.primary,
-              );
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              TextField(
-                controller: _msgCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(hintText: 'Type your message...'),
-              ),
-              const SizedBox(height: 8),
-              AppButton(
-                label: 'Send to ${_selected.length} contacts',
-                onPressed: _selected.isEmpty ? null : _send,
-                loading: _sending,
-                expand: true,
-              ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
-
-  Widget _groupTab() => const Center(child: Text('Group sending coming soon', style: TextStyle(color: AppColors.textLight)));
-  Widget _bulkTab()  => const Center(child: Text('CSV bulk send coming soon', style: TextStyle(color: AppColors.textLight)));
 }

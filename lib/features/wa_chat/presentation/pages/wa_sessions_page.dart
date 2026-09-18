@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/network/wa_chat_api_service.dart';
 import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
-import 'wa_chat_api.dart';
-import 'wa_chat_extra_pages.dart' show WaContactsPage;
-import '_shared.dart';
+import 'package:unichat_mobile_app/features/modules/wa_chat_api.dart';
+import 'wa_contacts_page.dart';
+import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 /// WA Chat's "Sessions" — mirrors frontend/src/pages/wa-chat/pages/Sessions.tsx: list and every
 /// per-session action (start/stop/logout/force-kill/QR/pairing-code/delete) go straight to the
@@ -36,6 +36,12 @@ class _WaSessionsPageState extends ConsumerState<WaSessionsPage> {
   String? _error;
   bool _reconnecting = false;
   String? _apiKeyOverride;
+  // Only the "no key ever provisioned yet" case auto-reconnects (see _load) — minting the FIRST
+  // key has no existing client to kick. A 401 on an existing key stays manual: reconnecting
+  // revokes that key instantly and it's shared by every client on the company's account (the web
+  // app, other devices, ...); auto-firing on a transient 401 would silently kick them all. Capped
+  // to one attempt so a broken reconnect doesn't retry forever.
+  bool _autoReconnectTried = false;
 
   @override
   void initState() {
@@ -48,6 +54,11 @@ class _WaSessionsPageState extends ConsumerState<WaSessionsPage> {
   Future<void> _load() async {
     final key = _apiKey;
     if (key == null || key.isEmpty) {
+      if (!_autoReconnectTried) {
+        _autoReconnectTried = true;
+        await _reconnect();
+        return;
+      }
       setState(() {
         _loading = false;
         _error = 'This company has no WhatsApp gateway token configured yet.';
@@ -99,9 +110,10 @@ class _WaSessionsPageState extends ConsumerState<WaSessionsPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _reconnecting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Couldn't reconnect — ${apiErrorMessage(e)}")));
+      // Also clears the full-page loading spinner an auto-attempt (see _load) leaves behind —
+      // without this, a reconnect failing here left the page stuck loading forever with no
+      // visible explanation and no way to retry.
+      setState(() { _reconnecting = false; _loading = false; _error = "Couldn't reconnect — ${apiErrorMessage(e)}"; });
     }
   }
 

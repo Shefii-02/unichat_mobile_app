@@ -1,8 +1,8 @@
 // ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'module_providers.dart';
-import '_shared.dart';
+import 'package:unichat_mobile_app/features/modules/module_providers.dart';
+import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 /// WA Cloud's "Phone Numbers" — official Meta WhatsApp Business API numbers, registered and
 /// managed entirely through Laravel (`/phone-numbers`). Unrelated to WA Chat's open-wa

@@ -38,18 +38,18 @@ class WaChatApiService {
     // that's visible directly in the debug console, matching the logging `DioClient`
     // already gives the Laravel client (see dio_client.dart's own PrettyDioLogger).
     dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
-      if (kDebugMode) {
-        debugPrint('[WA Chat gateway] ${options.method} ${options.uri}'
-            '${options.queryParameters.isNotEmpty ? '\n  query: ${options.queryParameters}' : ''}'
-            '${options.data != null ? '\n  payload: ${options.data}' : ''}');
-      }
+      // if (kDebugMode) {
+      //   debugPrint('[WA Chat gateway] ${options.method} ${options.uri}'
+      //       '${options.queryParameters.isNotEmpty ? '\n  query: ${options.queryParameters}' : ''}'
+      //       '${options.data != null ? '\n  payload: ${options.data}' : ''}');
+      // }
       handler.next(options);
     }));
     if (kDebugMode) {
       dio.interceptors.add(PrettyDioLogger(
         requestHeader: false,
         requestBody: true,
-        responseBody: false,
+        responseBody: true,
         error: true,
         compact: true,
       ));
@@ -193,6 +193,24 @@ class WaChatApiService {
     }
   }
 
+  /// `GET /api/sessions/:id/contacts/:contactId/phone` — `{contactId, phone: string|null}`. On the
+  /// Baileys engine a chat id is frequently an opaque `@lid` privacy id rather than a phone-number
+  /// JID; this asks the engine to resolve the real MSISDN behind it (best-effort — `null` means the
+  /// engine couldn't map it, not that the contact has no number). Errors are swallowed to `null`
+  /// since the UI's only fallback either way is "phone number unknown".
+  static Future<String?> resolveContactPhone(String sessionId, String apiKey, String contactId) async {
+    try {
+      final res = await _dio.get(
+        '/api/sessions/${Uri.encodeComponent(sessionId)}/contacts/${Uri.encodeComponent(contactId)}/phone',
+        options: _auth(apiKey),
+      );
+      final data = res.data;
+      return data is Map ? data['phone'] as String? : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// `GET /api/sessions/:id/contacts/profile-pictures?ids=` — batch-resolves picture URLs for a
   /// whole chat list in ONE request. Mirrors `contactApi.profilePictures`: firing one request per
   /// tile instead exhausts the gateway's per-IP throttle (429s). Capped at 50 ids (matches the
@@ -228,7 +246,58 @@ class WaChatApiService {
     final res = await _dio.get('/api/sessions/${Uri.encodeComponent(sessionId)}/chats',
         options: _auth(apiKey));
     final data = res.data;
+    // if (kDebugMode) {
+    //   debugPrint('[WA Chat gateway] getChats($sessionId) → ${res.statusCode}, '
+    //       '${data is List ? '${data.length} chat(s)' : 'unexpected body: $data'}');
+    // }
     return data is List ? data.cast<Map<String, dynamic>>() : [];
+  }
+
+  /// `GET /api/sessions/:id/contacts` — a bare array of the session's own WhatsApp address book
+  /// (`id, name?, pushName?, number, isMyContact, isBlocked, profilePicUrl?`). No server-side
+  /// search — callers filter the fetched list client-side (same pattern as [getGroups]/[getChats]).
+  /// Backs the campaign composer's "Contact" message tab (send-a-contact-card), which shares a
+  /// WhatsApp contact from this session rather than a CRM one.
+  static Future<List<Map<String, dynamic>>> getSessionContacts(String sessionId, String apiKey, {int limit = 1000}) async {
+    final res = await _dio.get(
+      '/api/sessions/${Uri.encodeComponent(sessionId)}/contacts',
+      queryParameters: {'limit': limit},
+      options: _auth(apiKey),
+    );
+    final data = res.data;
+    // if (kDebugMode) {
+    //   debugPrint('[WA Chat gateway] getSessionContacts($sessionId) → ${res.statusCode}, '
+    //       '${data is List ? '${data.length} contact(s)' : 'unexpected body: $data'}');
+    // }
+    return data is List ? data.cast<Map<String, dynamic>>() : [];
+  }
+
+  /// `GET /api/sessions/:id/groups` — a bare array of `{id, name, linkedParentJID?}`. Backs the
+  /// campaign composer's "Group" recipient tab.
+  static Future<List<Map<String, dynamic>>> getGroups(String sessionId, String apiKey, {int limit = 1000}) async {
+    final res = await _dio.get(
+      '/api/sessions/${Uri.encodeComponent(sessionId)}/groups',
+      queryParameters: {'limit': limit},
+      options: _auth(apiKey),
+    );
+    final data = res.data;
+    // if (kDebugMode) {
+    //   debugPrint('[WA Chat gateway] getGroups($sessionId) → ${res.statusCode}, '
+    //       '${data is List ? '${data.length} group(s)' : 'unexpected body: $data'}');
+    // }
+    return data is List ? data.cast<Map<String, dynamic>>() : [];
+  }
+
+  /// `GET /api/sessions/:id/groups/:groupId` — full group info including
+  /// `participants: [{id, number, name?, isAdmin, isSuperAdmin}]`. Used to resolve a group
+  /// selection into individual recipients for the campaign composer.
+  static Future<Map<String, dynamic>> getGroupInfo(String sessionId, String apiKey, String groupId) async {
+    final res = await _dio.get(
+      '/api/sessions/${Uri.encodeComponent(sessionId)}/groups/${Uri.encodeComponent(groupId)}',
+      options: _auth(apiKey),
+    );
+    final data = res.data;
+    return data is Map ? data.cast<String, dynamic>() : {};
   }
 
   /// `GET /api/sessions/:id/messages?chatId=&limit=&after=` — `{messages: [...] (newest first),
@@ -402,5 +471,68 @@ class WaChatApiService {
       },
       options: _auth(apiKey),
     );
+  }
+
+  // ═══════════════════════════ Calls ═══════════════════════════
+
+  /// `POST /api/sessions/:id/calls/link` — `{link}`, a shareable `call.whatsapp.com` link (the
+  /// gateway can't place a real call; this only mints the link, same as WhatsApp's own "Share
+  /// call link" — sending it as a chat message is on the caller). `startTime` has no "unset"
+  /// value on the underlying whatsapp-web.js API, so "a link for right now" is
+  /// `DateTime.now().millisecondsSinceEpoch`, not an omitted field.
+  static Future<Map<String, dynamic>> generateCallLink(
+    String sessionId,
+    String apiKey, {
+    required String type,
+    required int startTime,
+  }) async {
+    final res = await _dio.post(
+      '/api/sessions/${Uri.encodeComponent(sessionId)}/calls/link',
+      data: {'type': type, 'startTime': startTime},
+      options: _auth(apiKey),
+    );
+    final data = res.data;
+    return data is Map ? data.cast<String, dynamic>() : {};
+  }
+
+  // ═══════════════════════════ Search ═══════════════════════════
+
+  /// `GET /api/search` — full-text search over message *content*, across every session the key
+  /// can see (unlike every other call in this file, the path itself isn't session-scoped;
+  /// `sessionId` below is just an optional narrowing filter). Mirrors `searchApi.search` in
+  /// frontend/src/pages/wa-chat/api/api.ts. Raises on the active provider being unavailable
+  /// (501) or its worker not answering (503) — callers should catch and show that distinctly
+  /// from a plain network error, as `GlobalSearch.tsx` does.
+  static Future<Map<String, dynamic>> search(
+    String apiKey, {
+    required String q,
+    String? sessionId,
+    String? chatId,
+    String? from,
+    String? direction,
+    String? type,
+    int? dateFrom,
+    int? dateTo,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _dio.get(
+      '/api/search',
+      queryParameters: {
+        'q': q,
+        if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId,
+        if (chatId != null && chatId.isNotEmpty) 'chatId': chatId,
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (direction != null && direction.isNotEmpty) 'direction': direction,
+        if (type != null && type.isNotEmpty) 'type': type,
+        if (dateFrom != null) 'dateFrom': dateFrom,
+        if (dateTo != null) 'dateTo': dateTo,
+        'limit': limit,
+        'offset': offset,
+      },
+      options: _auth(apiKey),
+    );
+    final data = res.data;
+    return data is Map ? data.cast<String, dynamic>() : {'hits': [], 'total': 0};
   }
 }

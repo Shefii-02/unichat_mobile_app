@@ -118,7 +118,7 @@ class AppModules {
       title: 'Campaigns',
       subtitle: 'Bulk & scheduled',
       icon: Icons.campaign_rounded,
-      route: '/message-sender',
+      route: '/wa-chat/message-sender',
       group: ModuleGroup.waChat,
       permission: 'campaigns.view',
       color: Color(0xFFF5871F),
@@ -128,7 +128,7 @@ class AppModules {
       title: 'Templates',
       subtitle: 'Message templates',
       icon: Icons.dashboard_customize_rounded,
-      route: '/templates?tab=1',
+      route: '/wa-chat/templates',
       group: ModuleGroup.waChat,
       permission: 'templates.view',
       color: Color(0xFF8A5CF6),
@@ -175,7 +175,7 @@ class AppModules {
     ),
     AppModule(
       id: 'wa_chat_audit',
-      title: 'Audit Analytics',
+      title: 'Audit Logs',
       subtitle: 'Gateway audit trail',
       icon: Icons.fact_check_rounded,
       route: '/wa-chat/audit',
@@ -211,7 +211,7 @@ class AppModules {
       title: 'WA Templates',
       subtitle: 'Message templates',
       icon: Icons.dashboard_customize_rounded,
-      route: '/templates?tab=0',
+      route: '/wa-cloud/templates',
       group: ModuleGroup.waCloud,
       permission: 'templates.view',
       color: Color(0xFF8A5CF6),
@@ -231,9 +231,9 @@ class AppModules {
       title: 'API Services',
       subtitle: 'Developer service',
       icon: Icons.vpn_key_rounded,
-      route: '/otp-service',
+      route: '/wa-cloud/otp-service',
       group: ModuleGroup.waCloud,
-      permission: 'otp.view',
+      permission: 'wa_cloud.view',
       color: Color(0xFFE0475B),
     ),
     AppModule(
@@ -241,7 +241,7 @@ class AppModules {
       title: 'Agent Automations',
       subtitle: 'Auto-replies',
       icon: Icons.auto_awesome_rounded,
-      route: '/wa-cloud?tab=1',
+      route: '/wa-cloud/automations',
       group: ModuleGroup.waCloud,
       permission: 'wa_cloud.view',
       color: Color(0xFF6D5EF0),
@@ -333,7 +333,7 @@ class AppModules {
       title: 'Playbooks',
       subtitle: 'Guided conversation scripts',
       icon: Icons.article_rounded,
-      route: '/ai-agent?tab=2',
+      route: '/wa-agent/playbooks',
       group: ModuleGroup.waAgents,
       permission: 'ai_agent.view',
       color: Color(0xFFDB8A19),
@@ -361,11 +361,11 @@ class AppModules {
     AppModule(
       id: 'wa_agent_logs',
       title: 'Logs',
-      subtitle: 'Activity & audit trail',
+      subtitle: 'Automation rule executions',
       icon: Icons.history_rounded,
-      route: '/wa-chat/audit',
+      route: '/wa-agent/logs',
       group: ModuleGroup.waAgents,
-      permission: 'contacts.view',
+      permission: 'wa_agent.automations.view',
       color: Color(0xFF5C6570),
     ),
     AppModule(
@@ -387,7 +387,7 @@ class AppModules {
       title: 'Accounts',
       subtitle: 'Connected ad accounts',
       icon: Icons.account_circle_rounded,
-      route: '/meta-ads?tab=3',
+      route: '/meta-ads/accounts',
       group: ModuleGroup.metaInstagram,
       permission: 'meta_ads.view',
       color: Color(0xFF1877F2),
@@ -397,7 +397,7 @@ class AppModules {
       title: 'Campaign',
       subtitle: 'Ad campaigns',
       icon: Icons.campaign_rounded,
-      route: '/meta-ads?tab=1',
+      route: '/meta-ads/campaigns',
       group: ModuleGroup.metaInstagram,
       permission: 'meta_ads.view',
       color: Color(0xFFF5871F),
@@ -407,7 +407,7 @@ class AppModules {
       title: 'Audience Set',
       subtitle: 'Targeting groups',
       icon: Icons.groups_2_rounded,
-      route: '/meta-ads?tab=2',
+      route: '/meta-ads/audience-sets',
       group: ModuleGroup.metaInstagram,
       permission: 'meta_ads.view',
       color: Color(0xFF0EA5A5),
@@ -457,7 +457,7 @@ class AppModules {
       title: 'Auto DM Rules',
       subtitle: 'Comment & DM automation',
       icon: Icons.smart_toy_rounded,
-      route: '/instagram?tab=1',
+      route: '/instagram/automations',
       group: ModuleGroup.metaInstagram,
       permission: 'instagram.view',
       color: Color(0xFFDD2A7B),
@@ -652,8 +652,8 @@ class AppModules {
     // My Attendance/Target/Payroll point at the same bottom-nav tab roots as the
     // Attendance/Target/Payroll tabs themselves (goToRoute switches tabs for these instead
     // of pushing a duplicate shell — see shell_routes.dart). Self-service, so no permission
-    // gate, matching the tabs' own always-visible behaviour. The rest deep-link into
-    // HrAdminPage's own tabs via `/hr?tab=N`.
+    // gate, matching the tabs' own always-visible behaviour. The rest each have their own
+    // dedicated page under `/hr/...` (see lib/features/hr/presentation/pages/).
     AppModule(
       id: 'my_attendance',
       title: 'My Attendance',
@@ -686,7 +686,7 @@ class AppModules {
       title: 'Attendances (All)',
       subtitle: "Team's daily attendance",
       icon: Icons.groups_rounded,
-      route: '/hr?tab=0',
+      route: '/hr/attendance-all',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF0C447C),
@@ -696,7 +696,7 @@ class AppModules {
       title: 'Payrolls',
       subtitle: 'Team payroll runs',
       icon: Icons.payments_rounded,
-      route: '/hr?tab=2',
+      route: '/hr/payrolls',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF72243E),
@@ -706,7 +706,7 @@ class AppModules {
       title: 'Sales',
       subtitle: 'Team sales records',
       icon: Icons.trending_up_rounded,
-      route: '/hr?tab=3',
+      route: '/hr/sales',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF27500A),
@@ -716,7 +716,7 @@ class AppModules {
       title: 'Incentives',
       subtitle: 'Bonus rules',
       icon: Icons.card_giftcard_rounded,
-      route: '/hr?tab=4',
+      route: '/hr/incentives',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF854F0B),
@@ -726,7 +726,7 @@ class AppModules {
       title: 'Leave Requests',
       subtitle: 'Approve / reject',
       icon: Icons.event_busy_rounded,
-      route: '/hr?tab=1',
+      route: '/hr/leave-requests',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF993C1D),
@@ -736,7 +736,7 @@ class AppModules {
       title: 'Staff Setups',
       subtitle: 'Per-staff HR profile',
       icon: Icons.manage_accounts_rounded,
-      route: '/hr?tab=5',
+      route: '/hr/staff-setup',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF3C3489),
@@ -746,7 +746,7 @@ class AppModules {
       title: 'Break Types',
       subtitle: 'Configure breaks',
       icon: Icons.free_breakfast_rounded,
-      route: '/hr?tab=6',
+      route: '/hr/break-types',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF5C6570),
@@ -756,7 +756,7 @@ class AppModules {
       title: 'Leave Types',
       subtitle: 'Configure leave',
       icon: Icons.flight_takeoff_rounded,
-      route: '/hr?tab=7',
+      route: '/hr/leave-types',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF5C6570),
@@ -766,7 +766,7 @@ class AppModules {
       title: 'Office Details',
       subtitle: 'Hours, geofence & rules',
       icon: Icons.business_rounded,
-      route: '/hr?tab=8',
+      route: '/hr/office',
       group: ModuleGroup.hr,
       permission: 'hr.view',
       color: Color(0xFF5C6570),
@@ -788,7 +788,7 @@ class AppModules {
       title: 'Roles',
       subtitle: 'Permission sets',
       icon: Icons.shield_moon_rounded,
-      route: '/staff?tab=1',
+      route: '/account/roles',
       group: ModuleGroup.account,
       permission: 'staff.view',
       color: Color(0xFF993C1D),
@@ -817,7 +817,7 @@ class AppModules {
       title: 'Plan Billing',
       subtitle: 'Subscription & invoices',
       icon: Icons.receipt_long_rounded,
-      route: '/wallet?tab=2',
+      route: '/account/plan-billing',
       group: ModuleGroup.account,
       permission: 'billing.view',
       color: Color(0xFF854F0B),
@@ -945,13 +945,10 @@ class AppModules {
     for (final m in all) {
       if (m.route == route) return m;
     }
-    // Fall back to a path-only match: several tabbed pages (HR, Staff, Wallet, Meta Ads,
-    // Instagram, WA Agent, WA Cloud, Sessions, Templates) have multiple catalogue entries
-    // sharing one bare path with different `?tab=` queries, so the base path alone (as the
-    // router's `state.matchedLocation` always is — it never carries the query string) has no
-    // exact-match entry of its own. Any one of that path's entries carries the permission
-    // this router redirect actually cares about, since they all gate the same underlying
-    // page.
+    // Fall back to a path-only match in case a caller passes a route with a query string
+    // attached — every catalogue entry is its own dedicated path now (no more `?tab=`
+    // variants sharing one bare path), so this is mostly a defensive no-op today, kept for
+    // robustness against `state.matchedLocation` growing a query string in the future.
     final path = route.split('?').first;
     for (final m in all) {
       if (m.route.split('?').first == path) return m;

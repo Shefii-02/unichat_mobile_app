@@ -245,18 +245,6 @@ final waCloudAutomationsProvider = FutureProvider((ref) => Api.list('/wa-cloud/a
 final flowBuildersProvider =
     FutureProvider((ref) => Api.list('/flow-builders'));
 
-// ── Media library ───────────────────────────────────────────────────────
-final mediaLibraryProvider =
-    FutureProvider((ref) => Api.list('/media-library'));
-final mediaFoldersProvider =
-    FutureProvider((ref) => Api.list('/media-library/folders'));
-
-// ── OTP service ─────────────────────────────────────────────────────────
-final otpServiceProvider =
-    FutureProvider((ref) => Api.one('/otp-service'));
-final otpServiceLogsProvider =
-    FutureProvider((ref) => Api.list('/otp-service/logs'));
-
 // ── Data export ─────────────────────────────────────────────────────────
 final exportJobsProvider =
     FutureProvider((ref) => Api.list('/wa-export'));

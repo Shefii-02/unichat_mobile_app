@@ -51,6 +51,8 @@ Future<bool> showWaAttachmentSheet(
         return await _shareLocation(context, sessionName, apiKey, chatId);
       case _AttachAction.catalog:
         return await _shareCatalogItem(context, sessionName, apiKey, chatId);
+      case _AttachAction.callLink:
+        return await _shareCallLink(context, sessionName, apiKey, chatId);
     }
   } catch (e) {
     if (context.mounted) {
@@ -60,7 +62,7 @@ Future<bool> showWaAttachmentSheet(
   }
 }
 
-enum _AttachAction { camera, gallery, video, document, audio, voice, location, catalog }
+enum _AttachAction { camera, gallery, video, document, audio, voice, location, catalog, callLink }
 
 class _AttachmentGrid extends StatelessWidget {
   const _AttachmentGrid();
@@ -74,6 +76,7 @@ class _AttachmentGrid extends StatelessWidget {
     (_AttachAction.voice, Icons.mic_rounded, 'Record voice', Color(0xFFDC2626)),
     (_AttachAction.location, Icons.location_on_rounded, 'Location', Color(0xFF16A34A)),
     (_AttachAction.catalog, Icons.storefront_rounded, 'Catalog', Color(0xFFD97706)),
+    (_AttachAction.callLink, Icons.call_rounded, 'Call link', Color(0xFF075E54)),
   ];
 
   @override
@@ -423,6 +426,50 @@ Future<bool> _shareCatalogItem(BuildContext context, String sessionName, String 
   } else {
     await WaChatApiService.sendText(sessionName, apiKey, chatId, caption);
   }
+  return true;
+}
+
+/// Mints a shareable `call.whatsapp.com` link (audio or video, picked by the user) and sends it
+/// into the chat as a text message — the gateway can only generate the link, not place a real
+/// call, so "sharing a call link" is the actual feature here, same as WhatsApp's own equivalent.
+Future<bool> _shareCallLink(BuildContext context, String sessionName, String apiKey, String chatId) async {
+  final type = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.call_rounded, color: AppColors.primary),
+            title: const Text('Voice call link'),
+            onTap: () => Navigator.pop(ctx, 'audio'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.videocam_rounded, color: AppColors.primary),
+            title: const Text('Video call link'),
+            onTap: () => Navigator.pop(ctx, 'video'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (type == null || !context.mounted) return false;
+
+  final res = await WaChatApiService.generateCallLink(
+    sessionName,
+    apiKey,
+    type: type,
+    startTime: DateTime.now().millisecondsSinceEpoch,
+  );
+  final link = res['link'] as String?;
+  if (link == null || link.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not generate a call link.')));
+    }
+    return false;
+  }
+  await WaChatApiService.sendText(sessionName, apiKey, chatId, link);
   return true;
 }
 
