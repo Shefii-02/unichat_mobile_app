@@ -1,14 +1,8 @@
 // ignore_for_file: use_build_context_synchronously
 import "dart:async";
-import "package:dio/dio.dart";
-import "package:fl_chart/fl_chart.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:go_router/go_router.dart";
 import "package:url_launcher/url_launcher.dart";
-import "package:unichat_mobile_app/core/network/wa_chat_api_service.dart";
-import "package:unichat_mobile_app/core/widgets/app_empty_state.dart";
-import "package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart";
 import "package:unichat_mobile_app/features/modules/module_providers.dart";
 import "package:unichat_mobile_app/features/modules/wa_chat_api.dart";
 import "package:unichat_mobile_app/features/modules/_shared.dart";
@@ -39,11 +33,18 @@ class _WaDataExportPageState extends ConsumerState<WaDataExportPage> {
   String _exportType = 'chats';
   bool _includeParticipants = false;
   bool _submitting = false;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -58,10 +59,27 @@ class _WaDataExportPageState extends ConsumerState<WaDataExportPage> {
     } catch (e) {
       setState(() { _loading = false; _error = apiErrorMessage(e); });
     }
+    _schedulePollIfNeeded();
   }
 
-  bool get _hasRunningJob =>
-      _jobs.any((j) => j['status'] == 'pending' || j['status'] == 'processing');
+  /// Mirrors WaDataExport.tsx's refetchInterval: poll every 4s only while a job is actively
+  /// running, and give up on a job stuck "processing" for more than 15 minutes — otherwise a
+  /// started export that never flips to done/failed would poll forever.
+  void _schedulePollIfNeeded() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    if (!_hasRunningJob) return;
+    _pollTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) _load();
+    });
+  }
+
+  bool get _hasRunningJob => _jobs.any((j) {
+        if (j['status'] != 'pending' && j['status'] != 'processing') return false;
+        final createdAt = DateTime.tryParse(str(j['created_at'], ''));
+        if (createdAt == null) return true;
+        return DateTime.now().difference(createdAt) < const Duration(minutes: 15);
+      });
 
   Future<void> _startExport() async {
     final sid = _sessionId;
@@ -230,7 +248,8 @@ class _WaDataExportPageState extends ConsumerState<WaDataExportPage> {
                           child: RecordCard(
                             title: exportTypeLabel(str(job['export_type'], '')),
                             subtitle: 'Session: ${str(job['session_id'], '')}'
-                                '${job['row_count'] != null ? ' · ${job['row_count']} rows' : ''}',
+                                '${job['row_count'] != null ? ' · ${job['row_count']} rows' : ''}'
+                                '${str(job['error_message'], '').isNotEmpty ? ' · ${job['error_message']}' : ''}',
                             leadingIcon: Icons.description_rounded,
                             leadingColor: _statusColor(str(job['status'], '')),
                             trailing: Row(

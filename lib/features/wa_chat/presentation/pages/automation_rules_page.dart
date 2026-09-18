@@ -97,9 +97,9 @@ class _AutomationRulesPageState extends ConsumerState<AutomationRulesPage> {
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: ChoiceChip(
-                  label: Text(str(s['session_name'] ?? s['session_id'])),
-                  selected: _filterSessionId == str(s['session_id']),
-                  onSelected: (_) => setState(() => _filterSessionId = str(s['session_id'])),
+                  label: Text(_sessionDisplayLabel(s)),
+                  selected: _filterSessionId == str(s['session_name']),
+                  onSelected: (_) => setState(() => _filterSessionId = str(s['session_name'])),
                 ),
               ),
           ],
@@ -132,12 +132,25 @@ class _AutomationRulesPageState extends ConsumerState<AutomationRulesPage> {
     );
   }
 
+  /// A session row's human label — `display_name` (what the session was named when created),
+  /// falling back to its phone number, then the raw gateway id (`session_name`, despite its
+  /// name — that field is the opaque gateway UUID every call is scoped to, not a human name).
+  String _sessionDisplayLabel(Rec s) => str(s['display_name'] ?? s['phone'] ?? s['session_name'], 'Session');
+
+  /// The session's display name when we have it loaded (`_sessions`), falling back to the bare
+  /// id — the id alone (a gateway UUID) isn't something a user can recognise at a glance.
+  String _sessionLabel(String sessionId) {
+    final match = _sessions.where((s) => str(s['session_name']) == sessionId);
+    if (match.isEmpty) return sessionId;
+    return _sessionDisplayLabel(match.first);
+  }
+
   Widget _ruleCard(BuildContext context, Rec r) {
     final actions = (r['actions'] is List) ? r['actions'] as List : const [];
     final message = actions.isNotEmpty && actions.first is Map ? (actions.first as Map)['message'] : null;
     return RecordCard(
       title: str(r['name']),
-      subtitle: '${_ruleTypeLabel(str(r['rule_type'], ''))} · ${str(r['session_id'])}'
+      subtitle: '${_ruleTypeLabel(str(r['rule_type'], ''))} · ${_sessionLabel(str(r['session_id']))}'
           '${message != null ? ' · "$message"' : ''}',
       leadingIcon: Icons.auto_awesome_rounded,
       leadingColor: r['is_active'] == false ? null : AppPalette.success,
@@ -160,7 +173,7 @@ class _AutomationRulesPageState extends ConsumerState<AutomationRulesPage> {
 
   Future<void> _copyToSession(BuildContext context, Rec r) async {
     final sessions = _sessions.isNotEmpty ? _sessions : await _loadSessions();
-    final others = sessions.where((s) => str(s['session_id']) != str(r['session_id'])).toList();
+    final others = sessions.where((s) => str(s['session_name']) != str(r['session_id'])).toList();
     if (others.isEmpty) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No other sessions to copy to')));
       return;
@@ -182,7 +195,7 @@ class _AutomationRulesPageState extends ConsumerState<AutomationRulesPage> {
             ),
             ...others.map((s) => ListTile(
                   leading: const Icon(Icons.smartphone_rounded),
-                  title: Text(str(s['session_name'] ?? s['session_id'])),
+                  title: Text(_sessionDisplayLabel(s)),
                   onTap: () => Navigator.pop(ctx, s),
                 )),
           ],
@@ -191,7 +204,7 @@ class _AutomationRulesPageState extends ConsumerState<AutomationRulesPage> {
     );
     if (target == null) return;
     final payload = <String, dynamic>{
-      'session_id': target['session_id'],
+      'session_id': target['session_name'],
       'rule_type': r['rule_type'],
       'name': r['name'],
       'is_active': r['is_active'] ?? true,
@@ -207,7 +220,7 @@ class _AutomationRulesPageState extends ConsumerState<AutomationRulesPage> {
     };
     if (!context.mounted) return;
     final ok = await runAction(context, () => WaChatApi.createAutomationRule(payload),
-        success: 'Copied to ${str(target['session_name'] ?? target['session_id'])}');
+        success: 'Copied to ${_sessionDisplayLabel(target)}');
     if (ok) ref.invalidate(waChatAutomationRulesProvider);
   }
 
@@ -242,9 +255,9 @@ class _AutomationRulesPageState extends ConsumerState<AutomationRulesPage> {
         FSelect<Rec>(label: 'Session', options: sessions,
             initial: existing == null
                 ? null
-                : sessions.cast<Rec?>().firstWhere((s) => s?['session_id'] == existing['session_id'], orElse: () => null),
-            labelOf: (s) => str(s['session_name'] ?? s['session_id']),
-            onSaved: (s) => data['session_id'] = s?['session_id']),
+                : sessions.cast<Rec?>().firstWhere((s) => s?['session_name'] == existing['session_id'], orElse: () => null),
+            labelOf: _sessionDisplayLabel,
+            onSaved: (s) => data['session_id'] = s?['session_name']),
         FSelect<String>(label: 'Rule type', options: _ruleTypes.map((r) => r.$1).toList(),
             initial: str(data['rule_type'], 'welcome_message'), labelOf: _ruleTypeLabel,
             onSaved: (v) => data['rule_type'] = v ?? 'welcome_message'),
