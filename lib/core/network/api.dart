@@ -52,7 +52,19 @@ class Api {
   static List<Map<String, dynamic>> _asList(dynamic body) {
     dynamic v = body;
     if (v is Map) {
-      v = v['data'] ?? v['items'] ?? v['results'] ?? v['records'] ?? v['devices'] ?? v['labels'] ?? v;
+      v = v['data'] ??
+          v['items'] ??
+          v['results'] ??
+          v['records'] ??
+          v['devices'] ??
+          v['labels'] ??
+          v['phone_numbers'] ??
+          v['accounts'] ??
+          v['automations'] ??
+          v['builders'] ??
+          v['forms'] ??
+          v['roles'] ??
+          v;
       if (v is Map && v['data'] is List) v = v['data'];
     }
     if (v is List) {

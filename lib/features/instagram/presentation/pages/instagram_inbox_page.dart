@@ -48,9 +48,9 @@ class InstagramInboxPage extends ConsumerWidget {
             emptyLabel: 'No Instagram accounts connected',
             emptyIcon: Icons.photo_camera_rounded,
             tile: (context, a) => RecordCard(
-              title: '@${str(a['username'] ?? a['handle'] ?? a['name'], 'account')}',
+              title: '@${str(a['username'] ?? a['name'], 'account')}',
               subtitle:
-                  '${compact(a['followers_count'] ?? a['followers'])} followers · ${str(a['account_type'])}',
+                  '${compact(a['followers_count'])} followers${str(a['page_name'], '').isNotEmpty ? ' · ${a['page_name']}' : ''}',
               leadingIcon: Icons.photo_camera_rounded,
               leadingColor: const Color(0xFFE1306C),
               trailing: RowMenu(items: [

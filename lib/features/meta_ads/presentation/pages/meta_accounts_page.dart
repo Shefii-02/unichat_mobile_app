@@ -15,13 +15,12 @@ class MetaAccountsPage extends ConsumerWidget {
         provider: metaAccountsProvider,
         emptyLabel: 'No ad accounts linked',
         tile: (context, a) => RecordCard(
-          title: str(a['name'] ?? a['account_name']),
-          subtitle:
-              '${str(a['account_id'] ?? a['ad_account_id'])} · ${str(a['currency'])}',
+          title: str(a['ad_account_name'] ?? a['page_name'], 'Ad account'),
+          subtitle: '${str(a['ad_account_id'])} · ${str(a['currency'], 'INR')}',
           leadingIcon: Icons.account_box_rounded,
           trailing: (a['is_default'] == true)
               ? const StatusPill('default')
-              : StatusPill(str(a['status'], 'active')),
+              : StatusPill(str(a['account_status'], 'active')),
           onTap: a['is_default'] == true
               ? null
               : () async {

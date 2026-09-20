@@ -300,6 +300,28 @@ class WaChatApiService {
     return data is Map ? data.cast<String, dynamic>() : {};
   }
 
+  /// `GET /api/sessions/:id/labels` — this session's WhatsApp Business labels:
+  /// `[{id, name, hexColor}]`. WhatsApp Business accounts only — the gateway answers 400 for a
+  /// regular WhatsApp account, which callers should surface as "not a Business account" rather
+  /// than a generic failure.
+  static Future<List<Map<String, dynamic>>> getLabels(String sessionId, String apiKey) async {
+    final res = await _dio.get('/api/sessions/${Uri.encodeComponent(sessionId)}/labels', options: _auth(apiKey));
+    final data = res.data;
+    return data is List ? data.cast<Map<String, dynamic>>() : [];
+  }
+
+  /// `GET /api/sessions/:id/labels/:labelId/chats` — every chat carrying that label:
+  /// `[{id, name, isGroup, kind, unreadCount, timestamp, lastMessage?}]`. whatsapp-web.js only —
+  /// the Baileys engine has no label-query capability at all and answers 501.
+  static Future<List<Map<String, dynamic>>> getChatsByLabel(String sessionId, String apiKey, String labelId) async {
+    final res = await _dio.get(
+      '/api/sessions/${Uri.encodeComponent(sessionId)}/labels/${Uri.encodeComponent(labelId)}/chats',
+      options: _auth(apiKey),
+    );
+    final data = res.data;
+    return data is List ? data.cast<Map<String, dynamic>>() : [];
+  }
+
   /// `GET /api/sessions/:id/messages?chatId=&limit=&after=` — `{messages: [...] (newest first),
   /// total}`. `after` is the gateway's keyset cursor (the `id` of the oldest row already fetched)
   /// for loading an older page — preferred over a plain offset because it anchors the window to a

@@ -168,10 +168,10 @@ class _HeroHeader extends ConsumerWidget {
                 onTap: () => context.push('/notifications'),
               ),
               const SizedBox(width: 10),
-              _HeroIconButton(
-                icon: Icons.grid_view_rounded,
-                onTap: () => context.push('/quick-actions'),
-              ),
+              // _HeroIconButton(
+              //   icon: Icons.grid_view_rounded,
+              //   onTap: () => context.push('/quick-actions'),
+              // ),
             ],
           ),
           if (pct != null) ...[

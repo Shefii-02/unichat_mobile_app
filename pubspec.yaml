@@ -1,6 +1,6 @@
 name: unichat_mobile_app
 description: "Flowexa — WhatsApp Business CRM & AI automation, mobile app"
-publish_to: 'none'
+#publish_to: 'none'
 version: 1.0.0+1
 
 environment:
