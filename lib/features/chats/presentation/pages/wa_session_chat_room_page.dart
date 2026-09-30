@@ -17,6 +17,7 @@ class WaSessionChatRoomPage extends StatefulWidget {
   const WaSessionChatRoomPage({
     super.key,
     required this.sessionName,
+    required this.sessionLabel,
     required this.apiKey,
     required this.chatId,
     required this.chatName,
@@ -25,6 +26,9 @@ class WaSessionChatRoomPage extends StatefulWidget {
   });
 
   final String sessionName;
+  /// Friendly display name for [sessionName] (falls back to the raw id) — shown in the app bar so
+  /// it's clear which WA session this conversation is on, matching Chats.tsx's ChatRoom header.
+  final String sessionLabel;
   final String apiKey;
   final String chatId;
   final String chatName;
@@ -409,8 +413,9 @@ class _WaSessionChatRoomPageState extends State<WaSessionChatRoomPage> {
                     Text(widget.chatName,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
-                    if (widget.isGroup)
-                      const Text('Group', style: TextStyle(fontSize: 11, color: Colors.white60)),
+                    Text('📱 ${widget.sessionLabel}${widget.isGroup ? ' · Group' : ''}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: Colors.white60)),
                   ],
                 ),
               ),

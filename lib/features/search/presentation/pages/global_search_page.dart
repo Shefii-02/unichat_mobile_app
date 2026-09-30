@@ -145,6 +145,7 @@ class _GlobalSearchPageState extends ConsumerState<GlobalSearchPage> {
       await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => WaSessionChatRoomPage(
           sessionName: sessionName,
+          sessionLabel: str(session['display_name'] ?? session['phone'], sessionName),
           apiKey: apiKey,
           chatId: chatId,
           chatName: chat.isNotEmpty ? str(chat['name'], 'Unknown') : chatId,

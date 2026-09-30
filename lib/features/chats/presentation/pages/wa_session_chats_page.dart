@@ -310,6 +310,7 @@ class _WaSessionChatsPageState extends ConsumerState<WaSessionChatsPage> {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => WaSessionChatRoomPage(
         sessionName: sessionName,
+        sessionLabel: str(widget.session['display_name'] ?? widget.session['phone'] ?? widget.session['session_name'], sessionName),
         apiKey: apiKey,
         chatId: chatId,
         chatName: str(chat['name'], 'Unknown'),
