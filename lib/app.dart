@@ -8,6 +8,7 @@ import 'package:unichat_mobile_app/core/services/heartbeat_service.dart';
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 import 'package:unichat_mobile_app/core/theme/theme_provider.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:unichat_mobile_app/features/sticky/sticky_overlay.dart';
 
 class FlowexaApp extends ConsumerStatefulWidget {
   const FlowexaApp({super.key});
@@ -39,6 +40,8 @@ class _FlowexaAppState extends ConsumerState<FlowexaApp> {
         darkTheme: AppTheme.dark,
         themeMode: mode,
         routerConfig: router,
+        // floating sticky notes + to-do circles over every screen
+        builder: (context, child) => StickyOverlay(child: child),
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,

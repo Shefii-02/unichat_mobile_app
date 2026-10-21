@@ -81,7 +81,7 @@ void main() {
     await tester.pumpAndSettle();
     final puts = api.where('PUT', '/campaigns/1').toList();
     expect(puts, hasLength(1));
-    expect((puts.single.data as Map).keys.toSet(), {'scheduled_at', 'starts_at', 'ends_at'});
+    expect((puts.single.data as Map).keys.toSet(), {'scheduled_at', 'starts_at', 'ends_at', 'auto_retry'});
     expect((puts.single.data as Map)['starts_at'], '2030-10-21');
     expect((puts.single.data as Map)['ends_at'], isNull);
   });

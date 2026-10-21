@@ -240,6 +240,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const DealsPage();
     case '/crm-tasks':
       return const CrmTasksAdminPage();
+    case '/crm-followups':
+      return const CrmTasksAdminPage(followups: true);
     case '/calendar':
       return const CalendarPage();
     case '/labels':

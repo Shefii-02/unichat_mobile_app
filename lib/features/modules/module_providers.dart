@@ -151,6 +151,17 @@ final crmMyTasksProvider =
     FutureProvider((ref) => Api.list('/crm/tasks', query: {'mine': true}));
 final crmAllTasksProvider = FutureProvider((ref) => Api.list('/crm/tasks'));
 
+/// Tasks page / follow-ups page rows. Key = "tab|scope": tab is todo | scheduled | followup,
+/// scope is all | mine | by_me (same query params as the web Tasks page).
+final crmTabTasksProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, key) {
+  final parts = key.split('|');
+  final scope = parts.length > 1 ? parts[1] : 'all';
+  return Api.list('/crm/tasks', query: {
+    'tab': parts[0],
+    if (scope != 'all') scope: 1,
+  });
+});
+
 // ── CRM: deals / labels / segments / blacklist ─────────────────────────────
 final crmDealsProvider = FutureProvider((ref) => Api.list('/crm/deals'));
 // `Api.list`'s envelope-unwrapping only checks data/items/results/records/devices —

@@ -120,6 +120,9 @@ class _CampaignsPageState extends State<CampaignsPage> {
         StatusPill(status),
         RowMenu(items: [
           ('Stats', Icons.bar_chart_rounded, () => _stats(c)),
+          if (started && _n(stats['failed']) > 0) ('Failed numbers', Icons.replay_rounded, () => _failed(c)),
+          if (started) (c['auto_retry'] == false ? 'Turn on auto-retry' : 'Stop auto-retry', Icons.autorenew_rounded,
+              () => _action2(id, c['auto_retry'] == false)),
           if (status == 'draft') ('Launch', Icons.play_arrow_rounded, () => _action(id, 'launch', 'Campaign launching.')),
           if (status == 'running') ('Pause', Icons.pause_rounded, () => _action(id, 'pause', 'Paused.')),
           if (status == 'paused') ('Resume', Icons.play_arrow_rounded, () => _action(id, 'resume', 'Resumed.')),
@@ -178,6 +181,93 @@ class _CampaignsPageState extends State<CampaignsPage> {
     );
   }
 
+  /// Failed numbers of a campaign: retry one right now, or queue every failed number again.
+  Future<void> _failed(Rec c) async {
+    final id = (c['id'] as num).toInt();
+    final running = str(c['status']) == 'running';
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        List<Rec>? rows;
+        String? error;
+        final busy = <int>{};
+        return StatefulBuilder(builder: (ctx, setS) {
+          Future<void> load() async {
+            try {
+              final r = await Api.list('/campaigns/$id/contacts', query: {'status': 'failed', 'per_page': 100});
+              setS(() { rows = r; error = null; });
+            } catch (e) { setS(() => error = apiErrorMessage(e)); }
+          }
+          if (rows == null && error == null) load();
+
+          Future<void> retryOne(Rec r) async {
+            final rid = (r['id'] as num).toInt();
+            setS(() => busy.add(rid));
+            final ok = await runAction(ctx, () => Api.post('/campaigns/retry', data: {
+              'campaign_id': id, 'campaign_contact_id': rid, 'phone': '${r['phone']}'.replaceAll(RegExp(r'\D'), ''),
+            }), success: 'Sent again.');
+            busy.remove(rid);
+            if (ok) { await load(); _load(); } else { setS(() {}); }
+          }
+
+          Future<void> retryAll() async {
+            final ok = await runAction(ctx, () => Api.post('/campaigns/$id/resend-failed'), success: 'Failed numbers queued for retry.');
+            if (ok) { Navigator.pop(ctx); _load(); }
+          }
+
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Failed numbers — ${str(c['name'])}', style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  if (error != null) Text(error!)
+                  else if (rows == null) const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+                  else if (rows!.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('No failed numbers.'))
+                  else ...[
+                    if (!running)
+                      Align(alignment: Alignment.centerRight,
+                        child: TextButton.icon(onPressed: retryAll, icon: const Icon(Icons.replay_rounded), label: const Text('Retry all failed'))),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: rows!.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final r = rows![i];
+                          final rid = (r['id'] as num).toInt();
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('${r['phone']}'),
+                            subtitle: Text(str(r['failed_reason'], 'Failed'), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            trailing: running ? null : busy.contains(rid)
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                : TextButton(onPressed: () => retryOne(r), child: const Text('Retry')),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ]),
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
+
+  Future<void> _action2(int id, bool enable) async {
+    final ok = await runAction(context, () => Api.post('/campaigns/$id/auto-retry', data: {'enabled': enable}),
+        success: enable ? 'Auto-retry is on.' : 'Auto-retry stopped for this campaign.');
+    if (ok) _load();
+  }
+
   Future<void> _action(int id, String action, String ok) async {
     if (await runAction(context, () => Api.post('/campaigns/$id/$action'), success: ok)) _load();
   }
@@ -215,6 +305,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
       final t => t,
     };
     final daily = num.tryParse('${c['daily_limit'] ?? ''}');
+    var autoRetry = c['auto_retry'] != false;
     var saving = false;
 
     final saved = await showModalBottomSheet<bool>(
@@ -303,6 +394,13 @@ class _CampaignsPageState extends State<CampaignsPage> {
                 () => to = null,
               ),
               Text('A reply arriving between these dates is credited to this campaign in its stats.', style: TextStyle(color: ctx.mutedColor, fontSize: 11)),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Auto-retry limited numbers'),
+                subtitle: const Text('Numbers WhatsApp limits (error 131049) are retried once automatically.'),
+                value: autoRetry,
+                onChanged: (v) => setS(() => autoRetry = v),
+              ),
                 ]),
               ),
             ),
@@ -326,6 +424,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
                                 'scheduled_at': at?.toUtc().toIso8601String(),
                                 'starts_at': from == null ? null : _isoDate(from!),
                                 'ends_at': to == null ? null : _isoDate(to!),
+                                'auto_retry': autoRetry,
                               }), success: 'Campaign updated.');
                           if (ctx.mounted) {
                             setS(() => saving = false);

@@ -23,6 +23,7 @@ class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
   bool _hasMore = false;
   int _page = 1;
   int _total = 0;
+  Map<String, dynamic> _counts = {}; // totals for the tabs, from the server
   String? _error;
   String _tab = 'all';
   final _search = TextEditingController();
@@ -74,6 +75,7 @@ class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
         _page = 1;
         _hasMore = data is Map && data['has_more'] == true;
         _total = data is Map ? (num.tryParse('${data['total']}')?.toInt() ?? rows.length) : rows.length;
+        if (data is Map && data['counts'] is Map) _counts = Map<String, dynamic>.from(data['counts'] as Map);
         _loading = false;
       });
     } catch (e) {
@@ -140,7 +142,7 @@ class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: ChoiceChip(
-                    label: Text(t.$2),
+                    label: Text(_counts[t.$1] == null ? t.$2 : '${t.$2} ${_counts[t.$1]}'),
                     selected: _tab == t.$1,
                     onSelected: (_) { setState(() => _tab = t.$1); _load(); },
                   ),

@@ -20,7 +20,7 @@ class _CampaignCreatePageState extends State<CampaignCreatePage> {
   final _paste = TextEditingController();
 
   List<Rec> _templates = [], _numbers = [], _labels = [];
-  bool _ready = false, _saving = false;
+  bool _ready = false, _saving = false, _autoRetry = true;
   String? _loadError;
 
   int? _template, _number;
@@ -109,6 +109,7 @@ class _CampaignCreatePageState extends State<CampaignCreatePage> {
       ..add(MapEntry('throttle_per_minute', _throttle.text.trim().isEmpty ? '60' : _throttle.text.trim()));
     if (_desc.text.trim().isNotEmpty) form.fields.add(MapEntry('description', _desc.text.trim()));
     if (_daily.text.trim().isNotEmpty) form.fields.add(MapEntry('daily_limit', _daily.text.trim()));
+    form.fields.add(MapEntry('auto_retry', _autoRetry ? '1' : '0'));
     if (_at != null) form.fields.add(MapEntry('scheduled_at', _at!.toUtc().toIso8601String()));
     if (_target == 'labels') {
       for (final id in _labelIds) { form.fields.add(MapEntry('target_labels[]', '$id')); }
@@ -213,6 +214,13 @@ class _CampaignCreatePageState extends State<CampaignCreatePage> {
         const SizedBox(width: 12),
         Expanded(child: FField(label: 'Daily limit (optional)', child: TextField(controller: _daily, keyboardType: TextInputType.number))),
       ]),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Auto-retry limited numbers'),
+        subtitle: const Text('Numbers WhatsApp limits (error 131049) are retried once automatically.'),
+        value: _autoRetry,
+        onChanged: (v) => setState(() => _autoRetry = v),
+      ),
       FField(
         label: 'Send at (leave empty to launch manually)',
         child: Row(children: [
