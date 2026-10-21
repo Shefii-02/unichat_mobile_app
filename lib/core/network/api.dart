@@ -104,5 +104,8 @@ String apiErrorMessage(Object e) {
     }
     return 'Request failed (${e.response?.statusCode ?? 'network'}).';
   }
+  // A plain `throw Exception('message')` raised by client-side validation carries a readable message.
+  final text = e.toString();
+  if (e is Exception && text.startsWith('Exception: ')) return text.substring(11);
   return 'Something went wrong.';
 }

@@ -13,6 +13,7 @@ enum ModuleGroup {
   sales('CRM & Leads'),
   hr('HR'),
   operations('Operations'),
+  accounts('Accounts'),
   account('Account');
 
   const ModuleGroup(this.label);
@@ -251,7 +252,7 @@ class AppModules {
       title: 'Inbox',
       subtitle: 'Team inbox',
       icon: Icons.inbox_rounded,
-      route: '/wa-chat/chats',
+      route: '/wa-cloud/inbox',
       group: ModuleGroup.waCloud,
       permission: 'contacts.view',
       color: Color(0xFF25A9E0),
@@ -285,6 +286,16 @@ class AppModules {
       group: ModuleGroup.waCloud,
       permission: 'settings.manage',
       color: Color(0xFF5C6570),
+    ),
+    AppModule(
+      id: 'wa_cloud_campaigns',
+      title: 'Campaigns',
+      subtitle: 'Official API bulk',
+      icon: Icons.campaign_rounded,
+      route: '/campaigns',
+      group: ModuleGroup.waCloud,
+      permission: 'campaigns.view',
+      color: Color(0xFFF5871F),
     ),
     AppModule(
       id: 'message_logs',
@@ -925,6 +936,16 @@ class AppModules {
       group: ModuleGroup.operations,
       permission: 'leads.view',
       color: Color(0xFF0D9488),
+    ),
+    AppModule(
+      id: 'accounts_books',
+      title: 'Accounts',
+      subtitle: 'Books, GST & expenses',
+      icon: Icons.calculate_rounded,
+      route: '/accounts',
+      group: ModuleGroup.accounts,
+      permission: 'accounts.read',
+      color: Color(0xFF0F766E),
     ),
     AppModule(
       id: 'settings',

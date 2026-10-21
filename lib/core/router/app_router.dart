@@ -23,6 +23,7 @@ import 'package:unichat_mobile_app/features/leads/presentation/pages/leads_page.
 import 'package:unichat_mobile_app/features/leads/presentation/pages/lead_detail_page.dart';
 import 'package:unichat_mobile_app/features/contacts/presentation/pages/contacts_page.dart';
 import 'package:unichat_mobile_app/features/contacts/presentation/pages/contact_detail_page.dart';
+import 'package:unichat_mobile_app/features/books/presentation/pages/books_page.dart';
 import 'package:unichat_mobile_app/features/campaigns/presentation/pages/campaigns_page.dart';
 import 'package:unichat_mobile_app/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:unichat_mobile_app/features/settings/presentation/pages/settings_page.dart';
@@ -42,6 +43,7 @@ import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/survey_forms_page.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_automations_page.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_inbox_analytics_page.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_inbox_page.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_settings_page.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_audit_log_page.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/message_logs_page.dart';
@@ -184,6 +186,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
   switch (route) {
     case '/campaigns':
       return const CampaignsPage();
+    case '/accounts':
+      return const BooksPage();
     case '/settings':
       return const SettingsPage();
     case '/reports':
@@ -283,6 +287,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const WaCloudAuditLogPage();
     case '/message-logs':
       return const MessageLogsPage();
+    case '/wa-cloud/inbox':
+      return const WaCloudInboxPage();
     case '/wa-agent/pipelines':
       return const PipelinesPage();
     case '/wa-agent/logs':

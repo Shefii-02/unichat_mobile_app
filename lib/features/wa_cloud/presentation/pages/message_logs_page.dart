@@ -1,7 +1,5 @@
 // ignore_for_file: use_build_context_synchronously
 import "package:flutter/material.dart";
-import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:unichat_mobile_app/features/modules/module_providers.dart";
 import "package:unichat_mobile_app/features/modules/_shared.dart";
 
 // ══════════════════════════ Message Logs ══════════════════════════
@@ -36,6 +34,7 @@ class _MessageLogsPageState extends State<MessageLogsPage> {
     try {
       final rows = await Api.list('/message-logs', query: {
         'per_page': 100,
+        'channel': 'meta', // this is the WA Cloud (Meta) log, same as the web's locked channel
         if (_direction != null) 'direction': _direction,
         if (_status != null) 'status': _status,
         if (_search.text.isNotEmpty) 'search': _search.text,
@@ -78,6 +77,8 @@ class _MessageLogsPageState extends State<MessageLogsPage> {
                       onSelected: (_) { setState(() => _direction = 'inbound'); _load(); }),
                   ChoiceChip(label: const Text('Outbound'), selected: _direction == 'outbound',
                       onSelected: (_) { setState(() => _direction = 'outbound'); _load(); }),
+                  ChoiceChip(label: const Text('Failed'), selected: _status == 'failed',
+                      onSelected: (v) { setState(() => _status = v ? 'failed' : null); _load(); }),
                 ]),
               ),
             ]),
@@ -104,12 +105,74 @@ class _MessageLogsPageState extends State<MessageLogsPage> {
                               leadingIcon: inbound ? Icons.call_received_rounded : Icons.call_made_rounded,
                               leadingColor: inbound ? AppPalette.info : AppPalette.accent,
                               trailing: StatusPill(str(log['status'], 'sent')),
+                              onTap: () => _detail(log),
+                              footer: _failureLine(log),
                             );
                           },
                         ),
                       ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Why a failed message failed — the reason Meta reported (saved on the log by the status webhook).
+  Widget? _failureLine(Rec log) {
+    if (str(log['status'], '') != 'failed') return null;
+    final reason = str(log['failure_reason'], 'No reason was reported by WhatsApp');
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text('Failed: $reason',
+          maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: AppPalette.danger, fontSize: 12)),
+    );
+  }
+
+  void _detail(Rec log) {
+    final contact = (log['contact'] is Map) ? (log['contact'] as Map) : const {};
+    final failed = str(log['status'], '') == 'failed';
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(str(contact['name'] ?? log['phone'], 'Message'),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              KvRow('Status', str(log['status'])),
+              KvRow('Direction', str(log['direction'])),
+              KvRow('Type', str(log['type'])),
+              KvRow('Phone', str(log['phone'])),
+              KvRow('Source', str(log['source'])),
+              KvRow('Reference', str(log['reference_name'])),
+              KvRow('Category', str(log['category'])),
+              KvRow('Sent at', str(log['sent_at'])),
+              KvRow('Delivered', str(log['delivered_at'])),
+              KvRow('Read', str(log['read_at'])),
+              if (str(log['retry_after'], '').isNotEmpty) KvRow('Retry from', str(log['retry_after'])),
+              if (failed) ...[
+                const SizedBox(height: 8),
+                const Text('Failure reason', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(str(log['failure_reason'], 'No reason was reported by WhatsApp'),
+                    style: const TextStyle(color: AppPalette.danger)),
+              ],
+              if (str(log['content'], '').isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text('Content', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(str(log['content'])),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,8 +1,11 @@
+// ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
-import 'package:unichat_mobile_app/core/constants/app_colors.dart';
-import 'package:unichat_mobile_app/core/network/dio_client.dart';
-import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
+import 'package:unichat_mobile_app/features/campaigns/presentation/pages/campaign_create_page.dart';
+import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
+/// WA Cloud (Meta API) campaigns — same list the web "Campaigns" page shows. Creating a campaign
+/// (template, number, audience), follow progress, edit a campaign that has not started,
+/// launch / pause / resume, and delete.
 class CampaignsPage extends StatefulWidget {
   const CampaignsPage({super.key});
   @override
@@ -10,92 +13,238 @@ class CampaignsPage extends StatefulWidget {
 }
 
 class _CampaignsPageState extends State<CampaignsPage> {
-  List<dynamic> _campaigns = [];
+  List<Rec> _campaigns = [];
   bool _loading = true;
+  String? _error;
+  String? _status;
+
+  static const _statuses = ['draft', 'scheduled', 'running', 'paused', 'completed', 'failed'];
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() { _loading = true; _error = null; });
     try {
-      final res = await DioClient.laravelDio.get('/campaigns');
-      final data = res.data as Map<String, dynamic>;
-      if (mounted) setState(() { _campaigns = (data['data'] as List?) ?? []; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      final rows = await Api.list('/campaigns', query: {'per_page': 50, if (_status != null) 'status': _status});
+      if (mounted) setState(() { _campaigns = rows; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = apiErrorMessage(e); _loading = false; });
     }
+  }
+
+  num _n(Object? v) => num.tryParse('${v ?? 0}') ?? 0;
+
+  /// "20 Oct, 9:00 PM" in the phone's local time.
+  String _fmt(Object? iso) {
+    final d = DateTime.tryParse('${iso ?? ''}')?.toLocal();
+    if (d == null) return '—';
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    return '${d.day} ${m[d.month - 1]} ${d.year}, $h:${d.minute.toString().padLeft(2, '0')} ${d.hour >= 12 ? 'PM' : 'AM'}';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Campaigns'), actions: [
-        IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () {}),
-      ]),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _campaigns.isEmpty
-              ? AppEmptyState(icon: Icons.campaign_outlined, title: 'No campaigns', subtitle: 'Create your first campaign.')
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _campaigns.length,
-                    itemBuilder: (_, i) => _campaignCard(_campaigns[i]),
-                  ),
+      appBar: AppBar(title: const Text('Campaigns')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final created = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => const CampaignCreatePage()));
+          if (created == true) _load();
+        },
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('New'),
+      ),
+      body: Column(children: [
+        SizedBox(
+          height: 52,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(label: const Text('All'), selected: _status == null,
+                    onSelected: (_) { setState(() => _status = null); _load(); }),
+              ),
+              for (final s in _statuses)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(label: Text(s[0].toUpperCase() + s.substring(1)), selected: _status == s,
+                      onSelected: (_) { setState(() => _status = s); _load(); }),
                 ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, textAlign: TextAlign.center)))
+                  : _campaigns.isEmpty
+                      ? Center(child: Text('No campaigns', style: TextStyle(color: context.mutedColor)))
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.all(12),
+                            itemCount: _campaigns.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (_, i) => _card(_campaigns[i]),
+                          ),
+                        ),
+        ),
+      ]),
     );
   }
 
-  Widget _campaignCard(Map<String, dynamic> c) {
-    final name   = c['name'] as String? ?? 'Campaign';
-    final status = c['status'] as String? ?? 'draft';
-    final sent   = c['sent_count'] as int? ?? 0;
-    final total  = c['total_recipients'] as int? ?? 1;
-    final leads  = c['leads_count'] as int? ?? 0;
+  Widget _card(Rec c) {
+    final status = str(c['status'], 'draft');
+    final stats = (c['stats'] is Map) ? (c['stats'] as Map) : const {};
+    final template = (c['template'] is Map) ? (c['template'] as Map) : const {};
+    final started = !const ['draft', 'scheduled'].contains(status);
+    final id = (c['id'] as num).toInt();
 
-    final statusColor = switch (status) {
-      'running'   => AppColors.success,
-      'scheduled' => AppColors.info,
-      'completed' => AppColors.textSecondary,
-      _           => AppColors.warning,
-    };
+    return RecordCard(
+      title: str(c['name'], 'Campaign'),
+      subtitle: [
+        if (template['name'] != null) '${template['name']}',
+        if (c['created_at'] != null) '${c['created_at']}'.split('T').first,
+      ].join(' · '),
+      leadingIcon: Icons.campaign_rounded,
+      leadingColor: const Color(0xFFF5871F),
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        StatusPill(status),
+        RowMenu(items: [
+          ('Stats', Icons.bar_chart_rounded, () => _stats(c)),
+          if (status == 'draft') ('Launch', Icons.play_arrow_rounded, () => _action(id, 'launch', 'Campaign launching.')),
+          if (status == 'running') ('Pause', Icons.pause_rounded, () => _action(id, 'pause', 'Paused.')),
+          if (status == 'paused') ('Resume', Icons.play_arrow_rounded, () => _action(id, 'resume', 'Resumed.')),
+          // editing only makes sense before any message has gone out
+          if (status == 'draft' || status == 'scheduled') ('Edit', Icons.edit_rounded, () => _edit(c)),
+          if (const ['draft', 'scheduled', 'paused', 'completed'].contains(status)) ('Delete', Icons.delete_outline_rounded, () => _delete(c)),
+        ]),
+      ]),
+      onTap: () => _stats(c),
+      footer: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (status == 'scheduled' && c['scheduled_at'] != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('🕒 Scheduled ${_fmt(c['scheduled_at'])}',
+                  style: const TextStyle(color: AppPalette.info, fontWeight: FontWeight.w600, fontSize: 12)),
+            ),
+          if (started)
+            Wrap(spacing: 12, children: [
+              Text('✅ ${stats['delivery_rate'] ?? 0}%', style: const TextStyle(color: AppPalette.success, fontSize: 12)),
+              Text('👁️ ${stats['read_rate'] ?? 0}%', style: const TextStyle(color: AppPalette.info, fontSize: 12)),
+              if (_n(stats['failed']) > 0) Text('❌ ${stats['failed']}', style: const TextStyle(color: AppPalette.danger, fontSize: 12)),
+            ])
+          else
+            Text('${c['estimated_contacts'] != null ? '~${c['estimated_contacts']}' : '—'} contacts',
+                style: TextStyle(color: context.mutedColor, fontSize: 12)),
+        ]),
+      ),
+    );
+  }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text('📢', style: TextStyle(fontSize: 18)),
-                const SizedBox(width: 8),
-                Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: statusColor.withAlpha(20), borderRadius: BorderRadius.circular(10)),
-                  child: Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w700)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Sent: $sent · Leads: $leads', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: total > 0 ? sent / total : 0,
-                backgroundColor: AppColors.bgGray,
-                valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-                minHeight: 6,
-              ),
-            ),
-          ],
+  void _stats(Rec c) {
+    final s = (c['stats'] is Map) ? (c['stats'] as Map) : const {};
+    final status = str(c['status'], 'draft');
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(str(c['name']), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            KvRow('Status', status),
+            if (status == 'scheduled') KvRow('Scheduled for', _fmt(c['scheduled_at'])),
+            KvRow('Contacts', str(s['total_contacts'])),
+            KvRow('Sent', str(s['sent'])),
+            KvRow('Delivered', '${s['delivered'] ?? 0} (${s['delivery_rate'] ?? 0}%)'),
+            KvRow('Read', '${s['read'] ?? 0} (${s['read_rate'] ?? 0}%)'),
+            KvRow('Failed', str(s['failed']), valueColor: _n(s['failed']) > 0 ? AppPalette.danger : null),
+            KvRow('Pending', str(s['pending'])),
+          ]),
         ),
       ),
     );
+  }
+
+  Future<void> _action(int id, String action, String ok) async {
+    if (await runAction(context, () => Api.post('/campaigns/$id/$action'), success: ok)) _load();
+  }
+
+  Future<void> _delete(Rec c) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete campaign?'),
+        content: Text('Delete "${str(c['name'])}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    if (await runAction(context, () => Api.delete('/campaigns/${c['id']}'), success: 'Deleted.')) _load();
+  }
+
+  /// Name, description, send time and speed — the parts that can change before a campaign starts.
+  Future<void> _edit(Rec c) async {
+    var name = str(c['name'], '');
+    var description = str(c['description'], '');
+    num? throttle = num.tryParse('${c['throttle_per_minute'] ?? ''}');
+    DateTime? at = c['scheduled_at'] != null ? DateTime.tryParse('${c['scheduled_at']}')?.toLocal() : null;
+
+    final saved = await showFormSheet(
+      context,
+      title: 'Edit campaign',
+      fields: (ctx) => [
+        FText(label: 'Name', initial: name, required: true, onSaved: (v) => name = v),
+        FText(label: 'Description', initial: description == '—' ? '' : description, maxLines: 2, onSaved: (v) => description = v),
+        FNumber(label: 'Messages per minute (10–1000)', initial: throttle, onSaved: (v) => throttle = v),
+        StatefulBuilder(builder: (ctx, setS) {
+          return FField(
+            label: 'Send at (leave empty to launch manually)',
+            child: Row(children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.schedule_rounded, size: 18),
+                  label: Text(at == null ? 'Pick date & time' : _fmt(at!.toIso8601String())),
+                  onPressed: () async {
+                    final now = DateTime.now();
+                    final d = await showDatePicker(context: ctx, initialDate: at ?? now.add(const Duration(hours: 1)), firstDate: now, lastDate: now.add(const Duration(days: 365)));
+                    if (d == null) return;
+                    final t = await showTimePicker(context: ctx, initialTime: TimeOfDay.fromDateTime(at ?? now.add(const Duration(hours: 1))));
+                    if (t == null) return;
+                    setS(() => at = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+                  },
+                ),
+              ),
+              if (at != null) IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setS(() => at = null)),
+            ]),
+          );
+        }),
+      ],
+      onSubmit: () async {
+        if (at != null && !at!.isAfter(DateTime.now())) throw Exception('Send time must be in the future.');
+        await Api.put('/campaigns/${c['id']}', data: {
+          'name': name,
+          'description': description.isEmpty ? null : description,
+          if (throttle != null) 'throttle_per_minute': throttle!.toInt(),
+          'scheduled_at': at?.toUtc().toIso8601String(),
+        });
+      },
+    );
+    if (saved) _load();
   }
 }
