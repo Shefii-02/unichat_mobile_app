@@ -1,4 +1,6 @@
 // ignore_for_file: use_build_context_synchronously
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
@@ -13,54 +15,96 @@ class WaCloudInboxPage extends StatefulWidget {
 class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
   static const _tabs = [('unread', 'Unread'), ('all', 'All'), ('mine', 'Mine'), ('unassigned', 'Unassigned')];
 
+  static const _perPage = 30;
+
   List<Rec> _rows = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _page = 1;
+  int _total = 0;
   String? _error;
   String _tab = 'all';
   final _search = TextEditingController();
+  final _scroll = ScrollController();
+  Timer? _debounce;
+  int _reqToken = 0; // a newer tab / search supersedes an older, slower response
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(() {
+      if (_scroll.hasClients && _scroll.position.extentAfter < 300) _loadMore();
+    });
     _load();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _scroll.dispose();
     _search.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      // GET /conversations returns { conversations: [...], total } — not one of the shapes Api.list unwraps.
-      final res = await Api.raw.get('/conversations', queryParameters: {
-        'per_page': 50,
+  Map<String, dynamic> _query(int page) => {
+        'per_page': _perPage,
+        'page': page,
         if (_tab == 'mine') 'mine': 1,
         if (_tab == 'unassigned') 'unassigned': 1,
         if (_tab == 'unread') 'unread': 1,
+        if (_search.text.trim().isNotEmpty) 'search': _search.text.trim(),
+      };
+
+  List<Rec> _parse(dynamic data) =>
+      ((data is Map ? data['conversations'] : null) as List? ?? const []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+
+  /// First page. GET /conversations returns { conversations, total, page, has_more } — not one of the
+  /// shapes Api.list unwraps — and search runs on the server so chats beyond the loaded pages are found.
+  Future<void> _load() async {
+    final token = ++_reqToken;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final res = await Api.raw.get('/conversations', queryParameters: _query(1));
+      if (!mounted || token != _reqToken) return;
+      final data = res.data;
+      final rows = _parse(data);
+      setState(() {
+        _rows = rows;
+        _page = 1;
+        _hasMore = data is Map && data['has_more'] == true;
+        _total = data is Map ? (num.tryParse('${data['total']}')?.toInt() ?? rows.length) : rows.length;
+        _loading = false;
       });
-      final list = (res.data is Map ? res.data['conversations'] : null) as List? ?? const [];
-      if (mounted) {
-        setState(() {
-          _rows = list.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
-          _loading = false;
-        });
-      }
     } catch (e) {
-      if (mounted) setState(() { _error = apiErrorMessage(e); _loading = false; });
+      if (mounted && token == _reqToken) setState(() { _error = apiErrorMessage(e); _loading = false; });
     }
   }
 
-  List<Rec> get _visible {
-    final q = _search.text.trim().toLowerCase();
-    if (q.isEmpty) return _rows;
-    return _rows.where((c) {
-      final name = '${c['contact_name'] ?? (c['contact'] is Map ? c['contact']['name'] : '') ?? ''}'.toLowerCase();
-      return name.contains(q) || '${c['phone'] ?? ''}'.toLowerCase().contains(q);
-    }).toList();
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || !_hasMore) return;
+    final token = _reqToken;
+    setState(() => _loadingMore = true);
+    try {
+      final res = await Api.raw.get('/conversations', queryParameters: _query(_page + 1));
+      if (!mounted || token != _reqToken) return;
+      final data = res.data;
+      final more = _parse(data);
+      setState(() {
+        final seen = _rows.map((c) => c['id']).toSet();
+        _rows = [..._rows, ...more.where((c) => !seen.contains(c['id']))];
+        _page += 1;
+        _hasMore = data is Map && data['has_more'] == true;
+        _total = data is Map ? (num.tryParse('${data['total']}')?.toInt() ?? _total) : _total;
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
+
+  List<Rec> get _visible => _rows;
 
   String _preview(Rec c) {
     final last = c['last_message'] ?? c['lastMessage'];
@@ -82,7 +126,7 @@ class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: TextField(
             controller: _search,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) { _debounce?.cancel(); _debounce = Timer(const Duration(milliseconds: 350), _load); },
             decoration: const InputDecoration(isDense: true, hintText: 'Search name or number', prefixIcon: Icon(Icons.search_rounded, size: 20)),
           ),
         ),
@@ -115,14 +159,33 @@ class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
                       : RefreshIndicator(
                           onRefresh: _load,
                           child: ListView.separated(
+                            controller: _scroll,
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.all(12),
-                            itemCount: rows.length,
+                            itemCount: rows.length + 1,
                             separatorBuilder: (_, __) => const SizedBox(height: 8),
-                            itemBuilder: (_, i) => _tile(rows[i]),
+                            itemBuilder: (_, i) => i < rows.length ? _tile(rows[i]) : _listFooter(rows.length),
                           ),
                         ),
         ),
       ]),
+    );
+  }
+
+  Widget _listFooter(int shown) {
+    if (_hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Center(
+          child: _loadingMore
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+              : OutlinedButton(onPressed: _loadMore, child: Text('Load more · $shown of $_total')),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(child: Text('$shown conversation${shown == 1 ? '' : 's'} · all loaded', style: TextStyle(color: context.mutedColor, fontSize: 12))),
     );
   }
 
@@ -174,6 +237,8 @@ class _ThreadPageState extends State<_ThreadPage> {
   List<Rec> _messages = [];
   bool _loading = true;
   bool _sending = false;
+  bool _hasMore = false;       // earlier messages exist
+  bool _loadingOlder = false;
   final _reply = TextEditingController();
   final _scroll = ScrollController();
 
@@ -182,6 +247,10 @@ class _ThreadPageState extends State<_ThreadPage> {
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(() {
+      if (!_scroll.hasClients) return;
+      if (_scroll.position.pixels < 80) _loadOlder();
+    });
     _load();
   }
 
@@ -192,6 +261,7 @@ class _ThreadPageState extends State<_ThreadPage> {
     super.dispose();
   }
 
+  /// The newest page of the thread (50 messages); earlier ones load on request with `before_id`.
   Future<void> _load() async {
     try {
       final res = await Api.raw.get('/conversations/$_id/messages');
@@ -200,6 +270,7 @@ class _ThreadPageState extends State<_ThreadPage> {
       setState(() {
         if (data['conversation'] is Map) _conv = (data['conversation'] as Map).cast<String, dynamic>();
         _messages = ((data['messages'] as List?) ?? const []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+        _hasMore = data['has_more'] == true;
         _loading = false;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -210,6 +281,33 @@ class _ThreadPageState extends State<_ThreadPage> {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
       }
+    }
+  }
+
+  /// Earlier messages: the page before the oldest one loaded. The reader's place is kept by adding the
+  /// height the new rows took to the scroll offset.
+  Future<void> _loadOlder() async {
+    if (_loadingOlder || _loading || !_hasMore || _messages.isEmpty) return;
+    setState(() => _loadingOlder = true);
+    final beforeExtent = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
+    final beforePixels = _scroll.hasClients ? _scroll.position.pixels : 0.0;
+    try {
+      final res = await Api.raw.get('/conversations/$_id/messages', queryParameters: {'before_id': _messages.first['id']});
+      final data = res.data as Map;
+      if (!mounted) return;
+      final older = ((data['messages'] as List?) ?? const []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+      setState(() {
+        final seen = _messages.map((m) => m['id']).toSet();
+        _messages = [...older.where((m) => !seen.contains(m['id'])), ..._messages];
+        _hasMore = data['has_more'] == true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) _scroll.jumpTo(beforePixels + (_scroll.position.maxScrollExtent - beforeExtent));
+      });
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+    } finally {
+      if (mounted) setState(() => _loadingOlder = false);
     }
   }
 
@@ -265,8 +363,22 @@ class _ThreadPageState extends State<_ThreadPage> {
                   : ListView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.all(12),
-                      itemCount: _messages.length,
-                      itemBuilder: (_, i) => _bubble(_messages[i]),
+                      itemCount: _messages.length + 1,
+                      itemBuilder: (_, i) {
+                        if (i == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Center(
+                              child: _hasMore
+                                  ? (_loadingOlder
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : TextButton(onPressed: _loadOlder, child: const Text('↑ Load earlier messages')))
+                                  : Text('Start of conversation', style: TextStyle(color: context.mutedColor, fontSize: 11)),
+                            ),
+                          );
+                        }
+                        return _bubble(_messages[i - 1]);
+                      },
                     ),
         ),
         SafeArea(

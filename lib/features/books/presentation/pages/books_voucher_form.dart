@@ -338,8 +338,9 @@ class _BooksVoucherFormPageState extends State<BooksVoucherFormPage> {
                 Expanded(child: TextField(controller: it.rate, keyboardType: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) => setState(() {}), decoration: const InputDecoration(labelText: 'Rate', isDense: true))),
                 const SizedBox(width: 8),
                 SizedBox(
-                  width: 90,
+                  width: 118, // narrower than this the "18%" and the arrow no longer fit and the row overflows
                   child: DropdownButtonFormField<num>(
+                    isExpanded: true,
                     initialValue: gstRates.contains(it.gst) ? it.gst : 0,
                     decoration: const InputDecoration(labelText: 'GST', isDense: true),
                     items: [for (final r in gstRates) DropdownMenuItem(value: r, child: Text('$r%'))],

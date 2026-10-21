@@ -198,53 +198,150 @@ class _CampaignsPageState extends State<CampaignsPage> {
     if (await runAction(context, () => Api.delete('/campaigns/${c['id']}'), success: 'Deleted.')) _load();
   }
 
-  /// Name, description, send time and speed — the parts that can change before a campaign starts.
+  /// The only parts of a campaign that can change before it starts: when it sends, and the lead window
+  /// (replies arriving between "from" and "to" are credited to it). Everything else is shown read-only.
   Future<void> _edit(Rec c) async {
-    var name = str(c['name'], '');
-    var description = str(c['description'], '');
-    num? throttle = num.tryParse('${c['throttle_per_minute'] ?? ''}');
-    DateTime? at = c['scheduled_at'] != null ? DateTime.tryParse('${c['scheduled_at']}')?.toLocal() : null;
+    DateTime? local(Object? v) => v == null ? null : DateTime.tryParse('$v')?.toLocal();
+    DateTime? at = local(c['scheduled_at']);
+    DateTime? from = local(c['starts_at']);
+    DateTime? to = local(c['ends_at']);
+    final template = c['template'] is Map ? c['template'] as Map : const {};
+    final number = c['wa_phone_number'] is Map ? c['wa_phone_number'] as Map : const {};
+    final labels = c['target_labels'] is List ? (c['target_labels'] as List).length : 0;
+    final target = switch ('${c['target_type']}') {
+      'all' => 'All opted-in contacts',
+      'labels' => '$labels label(s)',
+      'csv' => 'CSV list',
+      final t => t,
+    };
+    final daily = num.tryParse('${c['daily_limit'] ?? ''}');
+    var saving = false;
 
-    final saved = await showFormSheet(
-      context,
-      title: 'Edit campaign',
-      fields: (ctx) => [
-        FText(label: 'Name', initial: name, required: true, onSaved: (v) => name = v),
-        FText(label: 'Description', initial: description == '—' ? '' : description, maxLines: 2, onSaved: (v) => description = v),
-        FNumber(label: 'Messages per minute (10–1000)', initial: throttle, onSaved: (v) => throttle = v),
-        StatefulBuilder(builder: (ctx, setS) {
-          return FField(
-            label: 'Send at (leave empty to launch manually)',
-            child: Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.schedule_rounded, size: 18),
-                  label: Text(at == null ? 'Pick date & time' : _fmt(at!.toIso8601String())),
-                  onPressed: () async {
-                    final now = DateTime.now();
-                    final d = await showDatePicker(context: ctx, initialDate: at ?? now.add(const Duration(hours: 1)), firstDate: now, lastDate: now.add(const Duration(days: 365)));
-                    if (d == null) return;
-                    final t = await showTimePicker(context: ctx, initialTime: TimeOfDay.fromDateTime(at ?? now.add(const Duration(hours: 1))));
-                    if (t == null) return;
-                    setS(() => at = DateTime(d.year, d.month, d.day, t.hour, t.minute));
-                  },
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        Widget box(String label, String value) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(12), border: Border.all(color: ctx.lineColor)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label.toUpperCase(), style: TextStyle(fontSize: 10, letterSpacing: 0.5, color: ctx.mutedColor)),
+                const SizedBox(height: 2),
+                Text(value.isEmpty ? '—' : value, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ]),
+            );
+
+        Widget picker(String label, DateTime? value, String Function(DateTime) fmt, Future<DateTime?> Function() pick, void Function(DateTime) onPicked, VoidCallback clear) => FField(
+              label: label,
+              child: Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.event_rounded, size: 18),
+                    label: Text(value == null ? 'Not set' : fmt(value)),
+                    onPressed: () async {
+                      final d = await pick();
+                      if (d != null) setS(() => onPicked(d));
+                    },
+                  ),
                 ),
+                if (value != null) IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setS(clear)),
+              ]),
+            );
+
+        String dateOnly(DateTime d) => '${d.day}/${d.month}/${d.year}';
+        final now = DateTime.now();
+
+        // The Save button is pinned below the scrolling content so it is always reachable, even on a short screen.
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(ctx).viewInsets.bottom + 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Edit schedule', style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text('Only the send time and the lead dates can be changed. The rest is fixed once a campaign is created.', style: TextStyle(color: ctx.mutedColor, fontSize: 12)),
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final e in <(String, String)>[
+                  ('Campaign name', str(c['name'], '')),
+                  ('Status', str(c['status'], '')),
+                  ('Template', str(template['name'], '')),
+                  ('Sending number', str(number['display_phone_number'] ?? number['label'], '')),
+                  ('Target', target),
+                  ('Speed', '${c['throttle_per_minute'] ?? 60} msgs/min'),
+                  ('Daily limit', daily == null ? 'No limit' : '$daily per day'),
+                  if (str(c['description'], '').isNotEmpty) ('Description', str(c['description'], '')),
+                ])
+                  SizedBox(width: (MediaQuery.of(ctx).size.width - 48) / 2, child: box(e.$1, e.$2)),
+              ]),
+              const SizedBox(height: 16),
+              picker(
+                'Send at', at, (d) => _fmt(d.toIso8601String()),
+                () async {
+                  final d = await showDatePicker(context: ctx, initialDate: (at != null && at!.isAfter(now)) ? at! : now.add(const Duration(hours: 1)), firstDate: now, lastDate: now.add(const Duration(days: 365)));
+                  if (d == null) return null;
+                  final t = await showTimePicker(context: ctx, initialTime: TimeOfDay.fromDateTime(at ?? now.add(const Duration(hours: 1))));
+                  return t == null ? null : DateTime(d.year, d.month, d.day, t.hour, t.minute);
+                },
+                (d) => at = d,
+                () => at = null,
               ),
-              if (at != null) IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setS(() => at = null)),
-            ]),
-          );
-        }),
-      ],
-      onSubmit: () async {
-        if (at != null && !at!.isAfter(DateTime.now())) throw Exception('Send time must be in the future.');
-        await Api.put('/campaigns/${c['id']}', data: {
-          'name': name,
-          'description': description.isEmpty ? null : description,
-          if (throttle != null) 'throttle_per_minute': throttle!.toInt(),
-          'scheduled_at': at?.toUtc().toIso8601String(),
-        });
-      },
+              Text(at == null ? 'No send time: launch it yourself from the list.' : 'It launches automatically at this time.', style: TextStyle(color: ctx.mutedColor, fontSize: 11)),
+              const SizedBox(height: 8),
+              picker(
+                'Lead from', from, dateOnly,
+                () => showDatePicker(context: ctx, initialDate: from ?? now, firstDate: DateTime(now.year - 1), lastDate: DateTime(now.year + 3)),
+                (d) => from = d,
+                () => from = null,
+              ),
+              picker(
+                'Lead to', to, dateOnly,
+                () => showDatePicker(context: ctx, initialDate: to ?? from ?? now, firstDate: from ?? DateTime(now.year - 1), lastDate: DateTime(now.year + 3)),
+                (d) => to = d,
+                () => to = null,
+              ),
+              Text('A reply arriving between these dates is credited to this campaign in its stats.', style: TextStyle(color: ctx.mutedColor, fontSize: 11)),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (at != null && !at!.isAfter(DateTime.now())) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Send time must be in the future.')));
+                            return;
+                          }
+                          if (from != null && to != null && to!.isBefore(from!)) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Lead end date must be on or after the start date.')));
+                            return;
+                          }
+                          setS(() => saving = true);
+                          final ok = await runAction(ctx, () => Api.put('/campaigns/${c['id']}', data: {
+                                'scheduled_at': at?.toUtc().toIso8601String(),
+                                'starts_at': from == null ? null : _isoDate(from!),
+                                'ends_at': to == null ? null : _isoDate(to!),
+                              }), success: 'Campaign updated.');
+                          if (ctx.mounted) {
+                            setS(() => saving = false);
+                            if (ok) Navigator.of(ctx).pop(true);
+                          }
+                        },
+                  child: Text(saving ? 'Saving…' : 'Save'),
+                ),
+            ),
+          ]),
+        );
+      }),
     );
-    if (saved) _load();
+    if (saved == true) _load();
   }
+
+  String _isoDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
 }
