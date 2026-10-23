@@ -1,7 +1,7 @@
 # Flowexa Mobile — Postman
 
 API collection for the Flowexa mobile app (`unichat_mobile_app`). The app talks
-to **one** backend — the Laravel API at `https://flowexa-api.univexa.in/api/v1`.
+to **one** backend — the Laravel API at `https://api.teamzo.io/api/v1`.
 (`nodeBase` / `socketUrl` are declared in `ApiConstants` but nothing in `lib/`
 uses them yet.)
 
@@ -10,7 +10,7 @@ uses them yet.)
 | File | What it is |
 |---|---|
 | `Flowexa-Mobile-API.postman_collection.json` | The collection. Import into Postman. |
-| `Flowexa-Prod.postman_environment.json` | Environment → `https://flowexa-api.univexa.in/api/v1` |
+| `Flowexa-Prod.postman_environment.json` | Environment → `https://api.teamzo.io/api/v1` |
 | `Flowexa-Local.postman_environment.json` | Environment → `http://127.0.0.1:8000/api/v1` |
 | `generate.py` | Regenerates the collection from `php artisan route:list`. |
 

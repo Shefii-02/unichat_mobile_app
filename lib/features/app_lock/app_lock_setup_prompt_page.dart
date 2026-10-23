@@ -135,7 +135,7 @@ class _AppLockSetupPromptPageState extends ConsumerState<AppLockSetupPromptPage>
         const SizedBox(height: 8),
         if (entering)
           Text(
-            'Protect Flowexa with a $_pinLength-digit PIN on this phone. You can turn this on '
+            'Protect Teamzo with a $_pinLength-digit PIN on this phone. You can turn this on '
             "later from Settings instead — this only ever asks once.",
             textAlign: TextAlign.center,
             style: TextStyle(color: context.mutedColor, fontSize: 13, height: 1.4),

@@ -1,14 +1,14 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const laravelBase = 'https://flowexa-api.univexa.in/api/v1';
+  static const laravelBase = 'https://api.teamzo.io/api/v1';
   static const nodeBase    = 'https://unichatwa.univexa.in';
   static const socketUrl   = 'wss://unichatwa.univexa.in';
 
   /// Origin the Laravel API is served from, without the `/api/v1` suffix — needed to
   /// resolve `Storage::disk('public')` paths (e.g. `avatars/6/x.jpg`) into loadable URLs,
   /// the same way the web frontend does (`SettingsPage.tsx`: `` `/storage/${u.avatar}` ``).
-  static const laravelOrigin = 'https://flowexa-api.univexa.in';
+  static const laravelOrigin = 'https://api.teamzo.io';
 
   static const connectTimeout = Duration(seconds: 30);
   static const receiveTimeout = Duration(seconds: 30);

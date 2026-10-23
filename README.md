@@ -1,4 +1,4 @@
-# unichat_mobile_app
+# Teamzo
 
 Lead Automation
 

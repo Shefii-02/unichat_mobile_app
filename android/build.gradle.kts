@@ -16,6 +16,17 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
+    if (name == "file_picker") {
+        // file_picker 8.x hardcodes compileSdk 34, which conflicts with
+        // flutter_plugin_android_lifecycle (requires 36+).
+        afterEvaluate {
+            extensions.configure<com.android.build.gradle.LibraryExtension> {
+                compileSdk = 36
+            }
+        }
+    }
+}
+subprojects {
     project.evaluationDependsOn(":app")
 }
 

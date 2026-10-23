@@ -18,7 +18,7 @@ import 'package:unichat_mobile_app/features/modules/_shared.dart';
 ///   - creating a session (`WaChatApi.createSession`) — the gateway's `POST /sessions` requires
 ///     an UNSCOPED key, which a company's own scoped token can never be; only Laravel holds the
 ///     real admin key, server-side only.
-///   - "WA Contacts" / "Sync WA labels to CRM" — these write into Flowexa's own CRM tables
+///   - "WA Contacts" / "Sync WA labels to CRM" — these write into Teamzo's own CRM tables
 ///     (`Contact`, `ContactLabel`), a Laravel-side concept the gateway has no notion of at all.
 /// Laravel's own session list (`WaChatApi.sessions()`) is still fetched alongside the gateway's,
 /// purely to cross-reference `display_name` (gateway sessions are named an opaque

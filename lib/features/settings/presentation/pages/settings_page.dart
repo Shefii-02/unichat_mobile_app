@@ -15,11 +15,12 @@ import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_pro
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/settings/legal_webview_sheet.dart';
+import 'package:unichat_mobile_app/features/sticky/sticky_overlay.dart';
 
 // Placeholder — swap for the real hosted URL once available.
-const _privacyPolicyUrl = 'https://flowexa.app/legal/privacy';
-const _termsUrl = 'https://flowexa.app/legal/terms';
-const _supportEmail = 'support@flowexa.app';
+const _privacyPolicyUrl = 'https://teamzo.io/legal/privacy';
+const _termsUrl = 'https://teamzo.io/legal/terms';
+const _supportEmail = 'support@teamzo.io';
 
 const _notificationLabels = <String, (String, String)>{
   'new_lead_alert':        ('New lead alerts', 'A new lead is assigned to you'),
@@ -75,7 +76,7 @@ class SettingsPage extends ConsumerWidget {
 
           const SizedBox(height: 8),
 
-          _section('Appearance', [const _ThemeTile(), const _EdgeToEdgeTile()]),
+          _section('Appearance', [const _ThemeTile(), const _EdgeToEdgeTile(), const _StickyTile()]),
 
           _section('Notifications', [const _NotificationPermissionTile(), const _NotificationSection()]),
 
@@ -95,7 +96,7 @@ class SettingsPage extends ConsumerWidget {
             const _VersionTile(),
             _tile(Icons.support_agent, 'Support', subtitle: _supportEmail,
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => launchUrl(Uri.parse('mailto:$_supportEmail?subject=Flowexa%20support'))),
+                onTap: () => launchUrl(Uri.parse('mailto:$_supportEmail?subject=Teamzo%20support'))),
             _tile(Icons.privacy_tip_outlined, 'Privacy Policy', trailing: const Icon(Icons.chevron_right),
                 onTap: () => showLegalSheet(context, title: 'Privacy Policy', url: _privacyPolicyUrl)),
             _tile(Icons.description_outlined, 'Terms of Service', trailing: const Icon(Icons.chevron_right),
@@ -288,6 +289,25 @@ class _EdgeToEdgeTileState extends State<_EdgeToEdgeTile> {
   }
 }
 
+/// Shows / hides the floating sticky-notes and to-do buttons on the Home page.
+class _StickyTile extends ConsumerWidget {
+  const _StickyTile();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.sticky_note_2_outlined, color: AppColors.textSecondary, size: 22),
+      title: const Text('Sticky notes & to-do button', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Show the floating notes and to-do buttons on the Home page.',
+          style: TextStyle(fontSize: 11.5, color: AppColors.textLight)),
+      value: ref.watch(stickyEnabledProvider),
+      activeThumbColor: AppColors.primary,
+      onChanged: (v) {
+        ref.read(stickyEnabledProvider.notifier).set(v);
+      },
+    );
+  }
+}
+
 /// The OS-level permission — separate from the in-app category toggles below. If this is
 /// off, none of those toggles matter: the system blocks every notification regardless.
 class _NotificationPermissionTile extends StatefulWidget {
@@ -439,7 +459,7 @@ class _AppLockTile extends ConsumerWidget {
         secondary: const Icon(Icons.pin_outlined, color: AppColors.textSecondary, size: 22),
         title: const Text('App Lock PIN', style: TextStyle(fontSize: 14)),
         subtitle: Text(
-          state.hasMpin ? 'Require a PIN to open Flowexa on this phone' : 'Off — anyone with this phone can open the app',
+          state.hasMpin ? 'Require a PIN to open Teamzo on this phone' : 'Off — anyone with this phone can open the app',
           style: const TextStyle(fontSize: 11.5, color: AppColors.textLight),
         ),
         value: state.hasMpin,
@@ -468,8 +488,8 @@ class _AppLockTile extends ConsumerWidget {
         title: const Text('Turn off App Lock PIN?'),
         content: Text(
           state.biometricEnabled
-              ? 'Anyone with this phone will be able to open Flowexa without a PIN or biometric. Biometric login will be turned off too.'
-              : 'Anyone with this phone will be able to open Flowexa without a PIN.',
+              ? 'Anyone with this phone will be able to open Teamzo without a PIN or biometric. Biometric login will be turned off too.'
+              : 'Anyone with this phone will be able to open Teamzo without a PIN.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -606,7 +626,7 @@ class _SetPinSheetState extends State<_SetPinSheet> {
               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           if (entering) ...[
             const SizedBox(height: 8),
-            Text('A $_pinLength-digit PIN to quickly unlock Flowexa on this phone.',
+            Text('A $_pinLength-digit PIN to quickly unlock Teamzo on this phone.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: context.mutedColor, fontSize: 13, height: 1.4)),
           ],

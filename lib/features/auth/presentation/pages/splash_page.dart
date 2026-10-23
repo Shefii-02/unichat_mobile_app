@@ -1,3 +1,4 @@
+import 'package:unichat_mobile_app/core/widgets/teamzo_wordmark.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,15 +74,9 @@ class _SplashPageState extends ConsumerState<SplashPage>
           children: [
             ScaleTransition(
               scale: _scale,
-              child: Container(
-                width: 104,
-                height: 104,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: const Icon(Icons.bolt_rounded,
-                    color: AppPalette.accent, size: 60),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Image.asset('assets/logo/teamzo-icon-tight.png', width: 104, height: 104),
               ),
             ),
             const SizedBox(height: 22),
@@ -89,14 +84,9 @@ class _SplashPageState extends ConsumerState<SplashPage>
               opacity: _fade,
               child: const Column(
                 children: [
-                  Text('Flowexa',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5)),
+                  TeamzoWordmark(size: 40, color: Colors.white, accent: Color(0xFFD9DE4B)),
                   SizedBox(height: 6),
-                  Text('WhatsApp Business, on autopilot',
+                  Text('One team. One app.',
                       style: TextStyle(color: Colors.white70, fontSize: 14)),
                 ],
               ),

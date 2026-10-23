@@ -1,3 +1,4 @@
+import 'package:unichat_mobile_app/core/widgets/teamzo_wordmark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
@@ -66,18 +67,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(30),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 40),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Image.asset('assets/logo/teamzo-icon-tight.png', width: 72, height: 72),
                   ),
                   const SizedBox(height: 12),
-                  const Text('UniChat', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
-                  const Text('WhatsApp Business CRM', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const TeamzoWordmark(size: 32, color: Colors.white, accent: Color(0xFFD9DE4B)),
+                  const Text('One team. One app.', style: TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
               ),
             ),

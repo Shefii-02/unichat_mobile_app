@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Flowexa Mobile API",
-    "description": "REST API for the Flowexa mobile app (`unichat_mobile_app`).\n\nBase URL: `https://flowexa-api.univexa.in/api/v1`\n\n## Auth\n1. Run **Auth \u00b7 Device Login \u2192 POST device-auth/check** with a PIN or QR `token` from the web app (Settings \u2192 Devices \u2192 Link a device).\n2. Run **POST device-auth/claim** \u2014 its test script saves `{{token}}` automatically.\n3. Or use **Auth \u2192 POST auth/login** with email + password.\n\nAll other requests send `Authorization: Bearer {{token}}` via collection auth.\n\nGenerated from `php artisan route:list` \u2014 methods/paths are exact; request bodies for unlisted fields are placeholders, check the FormRequest.",
+    "description": "REST API for the Flowexa mobile app (`unichat_mobile_app`).\n\nBase URL: `https://api.teamzo.io/api/v1`\n\n## Auth\n1. Run **Auth \u00b7 Device Login \u2192 POST device-auth/check** with a PIN or QR `token` from the web app (Settings \u2192 Devices \u2192 Link a device).\n2. Run **POST device-auth/claim** \u2014 its test script saves `{{token}}` automatically.\n3. Or use **Auth \u2192 POST auth/login** with email + password.\n\nAll other requests send `Authorization: Bearer {{token}}` via collection auth.\n\nGenerated from `php artisan route:list` \u2014 methods/paths are exact; request bodies for unlisted fields are placeholders, check the FormRequest.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -28,7 +28,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://flowexa-api.univexa.in/api/v1"
+      "value": "https://api.teamzo.io/api/v1"
     },
     {
       "key": "token",

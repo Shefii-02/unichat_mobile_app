@@ -24,7 +24,7 @@ class DioClient {
       baseUrl: baseUrl,
       connectTimeout: ApiConstants.connectTimeout,
       receiveTimeout: ApiConstants.receiveTimeout,
-      headers: {'Accept': 'application/json'},
+      headers: {'Accept': 'application/json', 'X-Client': 'mobile'},
     ));
 
     dio.interceptors.add(_AuthInterceptor());
@@ -62,6 +62,8 @@ class DioClient {
 bool isAuthFailure(Response? res) {
   final code = res?.statusCode;
   if (code == 401 || code == 419) return true;
+  // Admin turned off this account's mobile access — treat like a dead session.
+  if (code == 403 && res?.data is Map && (res!.data as Map)['error_code'] == 'mobile_access_disabled') return true;
   if (code == 500 && res?.data is Map) {
     final data = res!.data as Map;
     final blob =

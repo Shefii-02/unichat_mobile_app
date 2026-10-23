@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.univexa.flowexa"
+    namespace = "com.univexa.teamzo"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -16,7 +16,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.univexa.flowexa"
+        applicationId = "com.univexa.teamzo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

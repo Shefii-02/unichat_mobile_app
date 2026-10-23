@@ -7,6 +7,7 @@ import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_pro
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
+import 'package:unichat_mobile_app/features/sticky/sticky_overlay.dart';
 import 'package:unichat_mobile_app/core/constants/api_constants.dart';
 
 /// Day-to-day CRM/HRMS dashboard: sales target, attendance (clock in/out,
@@ -32,30 +33,33 @@ class HomePage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(authProvider);
-            ref.invalidate(analyticsOverviewProvider);
-            ref.invalidate(hrAttendanceMeProvider);
-            ref.invalidate(dashboardMeProvider);
-            ref.invalidate(crmMyTasksProvider);
-          },
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 32),
-            children: [
-              const _HeroHeader(),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: AttendanceStatusCard(),
-              ),
-              const _PersonalStatsStrip(),
-              const _StatsStrip(),
-              const _PipelineSection(),
-              const _FollowUpsSection(),
-              const _TodayTasks(),
-              const _NextUpCard(),
-            ],
+      // sticky notes / to-do floating buttons live on the Home page only (toggle in Settings)
+      body: StickyOverlay(
+        child: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(authProvider);
+              ref.invalidate(analyticsOverviewProvider);
+              ref.invalidate(hrAttendanceMeProvider);
+              ref.invalidate(dashboardMeProvider);
+              ref.invalidate(crmMyTasksProvider);
+            },
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 32),
+              children: [
+                const _HeroHeader(),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: AttendanceStatusCard(),
+                ),
+                const _PersonalStatsStrip(),
+                const _StatsStrip(),
+                const _PipelineSection(),
+                const _FollowUpsSection(),
+                const _TodayTasks(),
+                const _NextUpCard(),
+              ],
+            ),
           ),
         ),
       ),
@@ -71,7 +75,11 @@ class HomePage extends ConsumerWidget {
 /// Always renders the section's own title, so at minimum it's clear *which* section has a
 /// problem.
 class _SectionPlaceholder extends StatelessWidget {
-  const _SectionPlaceholder({required this.title, required this.message, this.loading = false});
+  const _SectionPlaceholder({
+    required this.title,
+    required this.message,
+    this.loading = false,
+  });
   final String title;
   final String message;
   final bool loading;
@@ -90,13 +98,20 @@ class _SectionPlaceholder extends StatelessWidget {
               children: [
                 if (loading) ...[
                   SizedBox(
-                    width: 13, height: 13,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: context.mutedColor),
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.mutedColor,
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],
                 Expanded(
-                  child: Text(message, style: TextStyle(color: context.mutedColor, fontSize: 12.5)),
+                  child: Text(
+                    message,
+                    style: TextStyle(color: context.mutedColor, fontSize: 12.5),
+                  ),
                 ),
               ],
             ),
@@ -115,15 +130,23 @@ class _HeroHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).value;
-    final target = ref.watch(dashboardMeProvider).maybeWhen(
+    final target = ref
+        .watch(dashboardMeProvider)
+        .maybeWhen(
           orElse: () => null,
-          data: (d) => (d['sales_target'] is Map) ? (d['sales_target'] as Map).cast<String, dynamic>() : null,
+          data:
+              (d) =>
+                  (d['sales_target'] is Map)
+                      ? (d['sales_target'] as Map).cast<String, dynamic>()
+                      : null,
         );
     final progress = target?['progress'];
-    final pct = progress != null ? (num.tryParse('$progress') ?? 0).toDouble() : null;
+    final pct =
+        progress != null ? (num.tryParse('$progress') ?? 0).toDouble() : null;
 
     final h = DateTime.now().hour;
-    final greeting = h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening');
+    final greeting =
+        h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening');
 
     return Container(
       width: double.infinity,
@@ -139,15 +162,23 @@ class _HeroHeader extends ConsumerWidget {
                 child: CircleAvatar(
                   radius: 20,
                   backgroundColor: M.heroAvatarBg,
-                  backgroundImage: resolveStorageUrl(user?.avatar) != null
-                      ? NetworkImage(resolveStorageUrl(user!.avatar)!)
-                      : null,
-                  child: (user?.avatar == null || user!.avatar!.isEmpty)
-                      ? Text(
-                          (user?.name.isNotEmpty ?? false) ? user!.name[0].toUpperCase() : '?',
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: M.heroAvatarText, fontSize: 13),
-                        )
-                      : null,
+                  backgroundImage:
+                      resolveStorageUrl(user?.avatar) != null
+                          ? NetworkImage(resolveStorageUrl(user!.avatar)!)
+                          : null,
+                  child:
+                      (user?.avatar == null || user!.avatar!.isEmpty)
+                          ? Text(
+                            (user?.name.isNotEmpty ?? false)
+                                ? user!.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: M.heroAvatarText,
+                              fontSize: 13,
+                            ),
+                          )
+                          : null,
                 ),
               ),
               const SizedBox(width: 10),
@@ -155,10 +186,19 @@ class _HeroHeader extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(greeting, style: const TextStyle(color: M.heroMuted, fontSize: 12)),
-                    Text(user?.name ?? '',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      greeting,
+                      style: const TextStyle(color: M.heroMuted, fontSize: 12),
+                    ),
+                    Text(
+                      user?.name ?? '',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
@@ -188,16 +228,27 @@ class _HeroHeader extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Sales target this month', style: TextStyle(fontSize: 11, color: M.heroMuted)),
+                        const Text(
+                          'Sales target this month',
+                          style: TextStyle(fontSize: 11, color: M.heroMuted),
+                        ),
                         const SizedBox(height: 2),
                         RichText(
                           text: TextSpan(
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
                             children: [
                               TextSpan(text: '${pct.toStringAsFixed(0)}% '),
                               TextSpan(
                                 text: 'of ₹${compact(target?['target'])}',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400, color: M.heroMuted),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w400,
+                                  color: M.heroMuted,
+                                ),
                               ),
                             ],
                           ),
@@ -217,8 +268,14 @@ class _HeroHeader extends ConsumerWidget {
                           backgroundColor: Colors.white.withValues(alpha: 0.15),
                           valueColor: const AlwaysStoppedAnimation(M.heroRing),
                         ),
-                        Text('${pct.toStringAsFixed(0)}%',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                        Text(
+                          '${pct.toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -233,7 +290,11 @@ class _HeroHeader extends ConsumerWidget {
 }
 
 class _HeroIconButton extends StatelessWidget {
-  const _HeroIconButton({required this.icon, required this.onTap, this.showDot = false});
+  const _HeroIconButton({
+    required this.icon,
+    required this.onTap,
+    this.showDot = false,
+  });
   final IconData icon;
   final VoidCallback onTap;
   final bool showDot;
@@ -245,7 +306,10 @@ class _HeroIconButton extends StatelessWidget {
       child: Container(
         width: 34,
         height: 34,
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), shape: BoxShape.circle),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+        ),
         child: Stack(
           alignment: Alignment.center,
           children: [
@@ -257,7 +321,10 @@ class _HeroIconButton extends StatelessWidget {
                 child: Container(
                   width: 7,
                   height: 7,
-                  decoration: const BoxDecoration(color: M.heroDot, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: M.heroDot,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
           ],
@@ -276,16 +343,33 @@ class _PersonalStatsStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(dashboardMeProvider);
     return async.when(
-      loading: () => const _SectionPlaceholder(title: 'Today', message: 'Loading…', loading: true),
-      error: (e, _) => _SectionPlaceholder(title: 'Today', message: "Couldn't load — ${apiErrorMessage(e)}"),
+      loading:
+          () => const _SectionPlaceholder(
+            title: 'Today',
+            message: 'Loading…',
+            loading: true,
+          ),
+      error:
+          (e, _) => _SectionPlaceholder(
+            title: 'Today',
+            message: "Couldn't load — ${apiErrorMessage(e)}",
+          ),
       data: (d) {
         final leads = (d['leads'] is Map) ? (d['leads'] as Map) : const {};
-        final followUps = (d['follow_ups'] is Map) ? (d['follow_ups'] as Map) : const {};
-        final counts = (followUps['counts'] is Map) ? (followUps['counts'] as Map) : const {};
-        final followUpTotal = (counts['missed'] ?? 0) + (counts['late'] ?? 0) + (counts['due_today'] ?? 0);
+        final followUps =
+            (d['follow_ups'] is Map) ? (d['follow_ups'] as Map) : const {};
+        final counts =
+            (followUps['counts'] is Map)
+                ? (followUps['counts'] as Map)
+                : const {};
+        final followUpTotal =
+            (counts['missed'] ?? 0) +
+            (counts['late'] ?? 0) +
+            (counts['due_today'] ?? 0);
         final streak = (d['streak'] is Map) ? (d['streak'] as Map) : const {};
         final rank = (d['rank'] is Map) ? (d['rank'] as Map) : const {};
-        final rankLabel = rank['position'] != null ? '#${rank['position']}' : '—';
+        final rankLabel =
+            rank['position'] != null ? '#${rank['position']}' : '—';
 
         final chips = <(String, String, Tint)>[
           ('New leads', '${leads['new_today'] ?? 0}', tintPeach),
@@ -305,16 +389,31 @@ class _PersonalStatsStrip extends ConsumerWidget {
               final c = chips[i];
               return Container(
                 width: 84,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                decoration: BoxDecoration(color: c.$3.$1, borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: c.$3.$1,
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(c.$2, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: c.$3.$2)),
-                    Text(c.$1,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 10, color: c.$3.$3),
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      c.$2,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: c.$3.$2,
+                      ),
+                    ),
+                    Text(
+                      c.$1,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 10, color: c.$3.$3),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               );
@@ -342,18 +441,26 @@ class _StatsStrip extends ConsumerWidget {
     return async.when(
       loading: () => const SizedBox(height: 0),
       error: (e, _) {
-        if (e is DioException && e.response?.statusCode == 403) return const SizedBox(height: 0);
-        return _SectionPlaceholder(title: 'Statistics', message: "Couldn't load — ${apiErrorMessage(e)}");
+        if (e is DioException && e.response?.statusCode == 403)
+          return const SizedBox(height: 0);
+        return _SectionPlaceholder(
+          title: 'Statistics',
+          message: "Couldn't load — ${apiErrorMessage(e)}",
+        );
       },
       data: (d) {
-        final chips = <(String, String)>[
-          ('Messages', compact(d['messages_sent'] ?? d['total_messages'])),
-          ('Leads', compact(d['leads'] ?? d['total_leads'])),
-          ('Contacts', compact(d['contacts'] ?? d['total_contacts'])),
-          ('Campaigns', compact(d['campaigns'] ?? d['total_campaigns'])),
-        ].where((c) => c.$2 != '0').toList();
+        final chips =
+            <(String, String)>[
+              ('Messages', compact(d['messages_sent'] ?? d['total_messages'])),
+              ('Leads', compact(d['leads'] ?? d['total_leads'])),
+              ('Contacts', compact(d['contacts'] ?? d['total_contacts'])),
+              ('Campaigns', compact(d['campaigns'] ?? d['total_campaigns'])),
+            ].where((c) => c.$2 != '0').toList();
         if (chips.isEmpty) {
-          return const _SectionPlaceholder(title: 'Statistics', message: 'No activity yet this month.');
+          return const _SectionPlaceholder(
+            title: 'Statistics',
+            message: 'No activity yet this month.',
+          );
         }
         return Padding(
           padding: const EdgeInsets.only(bottom: 4),
@@ -374,8 +481,10 @@ class _StatsStrip extends ConsumerWidget {
                   itemBuilder: (_, i) {
                     final theme = Theme.of(context);
                     return Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(14),
@@ -385,12 +494,19 @@ class _StatsStrip extends ConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(chips[i].$2,
-                              style: theme.textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800)),
-                          Text(chips[i].$1,
-                              style: TextStyle(
-                                  color: context.mutedColor, fontSize: 11.5)),
+                          Text(
+                            chips[i].$2,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            chips[i].$1,
+                            style: TextStyle(
+                              color: context.mutedColor,
+                              fontSize: 11.5,
+                            ),
+                          ),
                         ],
                       ),
                     );
@@ -414,17 +530,30 @@ class _PipelineSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(dashboardMeProvider);
     return async.when(
-      loading: () => const _SectionPlaceholder(title: 'Pipeline', message: 'Loading…', loading: true),
-      error: (e, _) => _SectionPlaceholder(title: 'Pipeline', message: "Couldn't load — ${apiErrorMessage(e)}"),
+      loading:
+          () => const _SectionPlaceholder(
+            title: 'Pipeline',
+            message: 'Loading…',
+            loading: true,
+          ),
+      error:
+          (e, _) => _SectionPlaceholder(
+            title: 'Pipeline',
+            message: "Couldn't load — ${apiErrorMessage(e)}",
+          ),
       data: (d) {
-        final pipeline = (d['pipeline'] is Map) ? (d['pipeline'] as Map) : const {};
+        final pipeline =
+            (d['pipeline'] is Map) ? (d['pipeline'] as Map) : const {};
         final stages = <(String, int, Tint)>[
           ('New', (pipeline['new'] ?? 0) as int, tintPeach),
           ('Contacted', (pipeline['contacted'] ?? 0) as int, tintAmber),
           ('Won', (pipeline['won'] ?? 0) as int, tintGreen),
         ];
         if (stages.every((s) => s.$2 == 0)) {
-          return const _SectionPlaceholder(title: 'Pipeline', message: 'No leads in your pipeline yet.');
+          return const _SectionPlaceholder(
+            title: 'Pipeline',
+            message: 'No leads in your pipeline yet.',
+          );
         }
 
         return Padding(
@@ -432,10 +561,13 @@ class _PipelineSection extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SectionHeader('Pipeline',
-                  action: TextButton(
-                      onPressed: () => context.go('/leads'),
-                      child: const Text('View all'))),
+              SectionHeader(
+                'Pipeline',
+                action: TextButton(
+                  onPressed: () => context.go('/leads'),
+                  child: const Text('View all'),
+                ),
+              ),
               SizedBox(
                 height: 62,
                 child: ListView.separated(
@@ -447,12 +579,25 @@ class _PipelineSection extends ConsumerWidget {
                     return Container(
                       width: 96,
                       padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: s.$3.$1, borderRadius: BorderRadius.circular(12)),
+                      decoration: BoxDecoration(
+                        color: s.$3.$1,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${s.$2}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: s.$3.$2)),
-                          Text(s.$1, style: TextStyle(color: s.$3.$3, fontSize: 10)),
+                          Text(
+                            '${s.$2}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: s.$3.$2,
+                            ),
+                          ),
+                          Text(
+                            s.$1,
+                            style: TextStyle(color: s.$3.$3, fontSize: 10),
+                          ),
                         ],
                       ),
                     );
@@ -484,49 +629,88 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
   Widget build(BuildContext context) {
     final async = ref.watch(dashboardMeProvider);
     return async.when(
-      loading: () => const _SectionPlaceholder(title: 'Follow-ups', message: 'Loading…', loading: true),
-      error: (e, _) => _SectionPlaceholder(title: 'Follow-ups', message: "Couldn't load — ${apiErrorMessage(e)}"),
+      loading:
+          () => const _SectionPlaceholder(
+            title: 'Follow-ups',
+            message: 'Loading…',
+            loading: true,
+          ),
+      error:
+          (e, _) => _SectionPlaceholder(
+            title: 'Follow-ups',
+            message: "Couldn't load — ${apiErrorMessage(e)}",
+          ),
       data: (d) {
-        final followUps = (d['follow_ups'] is Map) ? (d['follow_ups'] as Map) : const {};
-        final counts = (followUps['counts'] is Map) ? (followUps['counts'] as Map) : const {};
-        final items = (followUps['items'] is List)
-            ? (followUps['items'] as List).whereType<Map>().toList()
-            : const <Map>[];
+        final followUps =
+            (d['follow_ups'] is Map) ? (d['follow_ups'] as Map) : const {};
+        final counts =
+            (followUps['counts'] is Map)
+                ? (followUps['counts'] as Map)
+                : const {};
+        final items =
+            (followUps['items'] is List)
+                ? (followUps['items'] as List).whereType<Map>().toList()
+                : const <Map>[];
         if (items.isEmpty) {
-          return const _SectionPlaceholder(title: 'Follow-ups', message: 'Nothing to follow up on.');
+          return const _SectionPlaceholder(
+            title: 'Follow-ups',
+            message: 'Nothing to follow up on.',
+          );
         }
 
-        final filtered = items.where((f) {
-          switch (_filter) {
-            case 'Missed':
-              return f['bucket'] == 'missed';
-            case 'Late':
-              return f['bucket'] == 'late';
-            case 'Call':
-              return f['type'] == 'call';
-            case 'Message':
-              return f['type'] == 'whatsapp' || f['type'] == 'email';
-            default:
-              return true;
-          }
-        }).toList();
+        final filtered =
+            items.where((f) {
+              switch (_filter) {
+                case 'Missed':
+                  return f['bucket'] == 'missed';
+                case 'Late':
+                  return f['bucket'] == 'late';
+                case 'Call':
+                  return f['type'] == 'call';
+                case 'Message':
+                  return f['type'] == 'whatsapp' || f['type'] == 'email';
+                default:
+                  return true;
+              }
+            }).toList();
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SectionHeader('Follow-ups',
-                  action: TextButton(
-                      onPressed: () => context.go('/leads'),
-                      child: const Text('View all'))),
+              SectionHeader(
+                'Follow-ups',
+                action: TextButton(
+                  onPressed: () => context.go('/leads'),
+                  child: const Text('View all'),
+                ),
+              ),
               Row(
                 children: [
-                  Expanded(child: _CountTile(label: 'Missed', value: counts['missed'] ?? 0, tint: tintRed)),
+                  Expanded(
+                    child: _CountTile(
+                      label: 'Missed',
+                      value: counts['missed'] ?? 0,
+                      tint: tintRed,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _CountTile(label: 'Late', value: counts['late'] ?? 0, tint: tintAmber)),
+                  Expanded(
+                    child: _CountTile(
+                      label: 'Late',
+                      value: counts['late'] ?? 0,
+                      tint: tintAmber,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  Expanded(child: _CountTile(label: 'Due today', value: counts['due_today'] ?? 0, tint: tintBlue)),
+                  Expanded(
+                    child: _CountTile(
+                      label: 'Due today',
+                      value: counts['due_today'] ?? 0,
+                      tint: tintBlue,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -545,9 +729,14 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
                       selected: selected,
                       onSelected: (_) => setState(() => _filter = f),
                       labelStyle: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                          color: selected ? theme.colorScheme.surface : context.mutedColor),
+                        fontSize: 11.5,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.normal,
+                        color:
+                            selected
+                                ? theme.colorScheme.surface
+                                : context.mutedColor,
+                      ),
                       selectedColor: theme.colorScheme.onSurface,
                       backgroundColor: context.altSurface,
                       side: BorderSide.none,
@@ -561,10 +750,15 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
               if (filtered.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text('Nothing in this filter.', style: TextStyle(color: context.mutedColor)),
+                  child: Text(
+                    'Nothing in this filter.',
+                    style: TextStyle(color: context.mutedColor),
+                  ),
                 )
               else
-                ...filtered.take(8).map((f) => _FollowUpRow(item: f.cast<String, dynamic>())),
+                ...filtered
+                    .take(8)
+                    .map((f) => _FollowUpRow(item: f.cast<String, dynamic>())),
             ],
           ),
         );
@@ -574,7 +768,11 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
 }
 
 class _CountTile extends StatelessWidget {
-  const _CountTile({required this.label, required this.value, required this.tint});
+  const _CountTile({
+    required this.label,
+    required this.value,
+    required this.tint,
+  });
   final String label;
   final Object? value;
   final Tint tint;
@@ -583,10 +781,20 @@ class _CountTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
-      decoration: BoxDecoration(color: tint.$1, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: tint.$1,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         children: [
-          Text('${value ?? 0}', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 17, color: tint.$2)),
+          Text(
+            '${value ?? 0}',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 17,
+              color: tint.$2,
+            ),
+          ),
           Text(label, style: TextStyle(color: tint.$3, fontSize: 10)),
         ],
       ),
@@ -616,7 +824,10 @@ class _FollowUpRow extends StatelessWidget {
           Container(
             width: 34,
             height: 34,
-            decoration: BoxDecoration(color: tint.$1, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: tint.$1,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(icon, size: 16, color: tint.$2),
           ),
           const SizedBox(width: 10),
@@ -624,18 +835,32 @@ class _FollowUpRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(str(item['contact_name'], item['title'] ?? 'Follow-up'),
-                    style: const TextStyle(fontSize: 13),
-                    overflow: TextOverflow.ellipsis),
-                Text('${type == 'call' ? 'Call' : 'Message'} · ${_dueLabel(item['due_at'])}',
-                    style: TextStyle(color: context.mutedColor, fontSize: 11.5)),
+                Text(
+                  str(item['contact_name'], item['title'] ?? 'Follow-up'),
+                  style: const TextStyle(fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${type == 'call' ? 'Call' : 'Message'} · ${_dueLabel(item['due_at'])}',
+                  style: TextStyle(color: context.mutedColor, fontSize: 11.5),
+                ),
               ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: tint.$1, borderRadius: BorderRadius.circular(8)),
-            child: Text(pillLabel, style: TextStyle(color: tint.$2, fontSize: 10, fontWeight: FontWeight.w600)),
+            decoration: BoxDecoration(
+              color: tint.$1,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              pillLabel,
+              style: TextStyle(
+                color: tint.$2,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -651,7 +876,8 @@ class _FollowUpRow extends StatelessWidget {
     final time = time12(d.toIso8601String());
     if (that == today) return 'due $time';
     if (that == today.subtract(const Duration(days: 1))) return 'due yesterday';
-    if (that.isBefore(today)) return 'due ${today.difference(that).inDays}d ago';
+    if (that.isBefore(today))
+      return 'due ${today.difference(that).inDays}d ago';
     return 'scheduled $time';
   }
 }
@@ -665,15 +891,28 @@ class _TodayTasks extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(dashboardMeProvider);
     return async.when(
-      loading: () => const _SectionPlaceholder(title: "Today's tasks", message: 'Loading…', loading: true),
-      error: (e, _) => _SectionPlaceholder(title: "Today's tasks", message: "Couldn't load — ${apiErrorMessage(e)}"),
+      loading:
+          () => const _SectionPlaceholder(
+            title: "Today's tasks",
+            message: 'Loading…',
+            loading: true,
+          ),
+      error:
+          (e, _) => _SectionPlaceholder(
+            title: "Today's tasks",
+            message: "Couldn't load — ${apiErrorMessage(e)}",
+          ),
       data: (d) {
         final tasks = (d['tasks'] is Map) ? (d['tasks'] as Map) : const {};
-        final items = (tasks['items'] is List)
-            ? (tasks['items'] as List).whereType<Map>().toList()
-            : const <Map>[];
+        final items =
+            (tasks['items'] is List)
+                ? (tasks['items'] as List).whereType<Map>().toList()
+                : const <Map>[];
         if (items.isEmpty) {
-          return const _SectionPlaceholder(title: "Today's tasks", message: 'Nothing assigned to you today.');
+          return const _SectionPlaceholder(
+            title: "Today's tasks",
+            message: 'Nothing assigned to you today.',
+          );
         }
         final done = tasks['done'] ?? 0;
         final total = tasks['total'] ?? items.length;
@@ -683,11 +922,18 @@ class _TodayTasks extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SectionHeader("Today's tasks", action: Text('$done of $total done', style: TextStyle(color: context.mutedColor, fontSize: 12))),
+              SectionHeader(
+                "Today's tasks",
+                action: Text(
+                  '$done of $total done',
+                  style: TextStyle(color: context.mutedColor, fontSize: 12),
+                ),
+              ),
               ...items.take(8).map((t) {
                 final isDone = str(t['status'], 'open') == 'done';
                 final priority = str(t['priority'], '');
-                final dotColor = priority == 'high' ? M.priorityHigh : M.priorityMed;
+                final dotColor =
+                    priority == 'high' ? M.priorityHigh : M.priorityMed;
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Material(
@@ -696,8 +942,10 @@ class _TodayTasks extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(12),
                       onTap: () async {
                         final ok = await runAction(
-                            context, () => Api.post('/crm/tasks/${t['id']}/toggle'),
-                            success: isDone ? null : 'Task completed');
+                          context,
+                          () => Api.post('/crm/tasks/${t['id']}/toggle'),
+                          success: isDone ? null : 'Task completed',
+                        );
                         if (ok) {
                           ref.invalidate(dashboardMeProvider);
                           ref.invalidate(crmMyTasksProvider);
@@ -710,33 +958,55 @@ class _TodayTasks extends ConsumerWidget {
                           children: [
                             isDone
                                 ? Container(
-                                    width: 18,
-                                    height: 18,
-                                    decoration: BoxDecoration(color: M.taskDoneBg, borderRadius: BorderRadius.circular(5)),
-                                    child: const Icon(Icons.check_rounded, size: 13, color: Colors.white),
-                                  )
-                                : Container(
-                                    width: 18,
-                                    height: 18,
-                                    decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(5),
-                                        border: Border.all(color: context.lineColor, width: 1.5)),
+                                  width: 18,
+                                  height: 18,
+                                  decoration: BoxDecoration(
+                                    color: M.taskDoneBg,
+                                    borderRadius: BorderRadius.circular(5),
                                   ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    size: 13,
+                                    color: Colors.white,
+                                  ),
+                                )
+                                : Container(
+                                  width: 18,
+                                  height: 18,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: context.lineColor,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Text(str(t['title'], 'Task'),
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      decoration: isDone ? TextDecoration.lineThrough : null,
-                                      color: isDone ? context.mutedColor : null)),
+                              child: Text(
+                                str(t['title'], 'Task'),
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  decoration:
+                                      isDone
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                  color: isDone ? context.mutedColor : null,
+                                ),
+                              ),
                             ),
-                            if (!isDone && priority.isNotEmpty && priority != '—')
+                            if (!isDone &&
+                                priority.isNotEmpty &&
+                                priority != '—')
                               Padding(
                                 padding: const EdgeInsets.only(left: 8, top: 4),
                                 child: Container(
                                   width: 6,
                                   height: 6,
-                                  decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                                  decoration: BoxDecoration(
+                                    color: dotColor,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
                               ),
                           ],
@@ -764,11 +1034,12 @@ class _NextUpCard extends ConsumerWidget {
     final async = ref.watch(dashboardMeProvider);
     return async.when(
       loading: () => const SizedBox(height: 0),
-      error: (e, _) => _NextUpBanner(
-        icon: Icons.error_outline_rounded,
-        title: "Next up: couldn't load",
-        subtitle: apiErrorMessage(e),
-      ),
+      error:
+          (e, _) => _NextUpBanner(
+            icon: Icons.error_outline_rounded,
+            title: "Next up: couldn't load",
+            subtitle: apiErrorMessage(e),
+          ),
       data: (d) {
         final next = d['next_up'];
         if (next is! Map) {
@@ -789,7 +1060,11 @@ class _NextUpCard extends ConsumerWidget {
 }
 
 class _NextUpBanner extends StatelessWidget {
-  const _NextUpBanner({required this.icon, required this.title, required this.subtitle});
+  const _NextUpBanner({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
   final IconData icon;
   final String title;
   final String subtitle;
@@ -800,13 +1075,19 @@ class _NextUpBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: M.lavenderBg, borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(
+          color: M.lavenderBg,
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Row(
           children: [
             Container(
               width: 36,
               height: 36,
-              decoration: BoxDecoration(color: M.lavenderIconBg, borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(
+                color: M.lavenderIconBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
               child: Icon(icon, size: 18, color: M.lavenderTitle),
             ),
             const SizedBox(width: 10),
@@ -814,12 +1095,21 @@ class _NextUpBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: M.lavenderTitle),
-                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      color: M.lavenderTitle,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: M.lavenderMuted, fontSize: 11),
+                    style: const TextStyle(
+                      color: M.lavenderMuted,
+                      fontSize: 11,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],

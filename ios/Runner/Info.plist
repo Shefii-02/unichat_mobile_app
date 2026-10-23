@@ -5,21 +5,21 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Flowexa uses the camera to scan the QR code that links this device to your account, and to attach photos to chats.</string>
+	<string>Teamzo uses the camera to scan the QR code that links this device to your account, and to attach photos to chats.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Flowexa needs access to your photos so you can send images and videos in chats and campaigns.</string>
+	<string>Teamzo needs access to your photos so you can send images and videos in chats and campaigns.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Flowexa saves media you receive in chats to your photo library.</string>
+	<string>Teamzo saves media you receive in chats to your photo library.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Flowexa needs the microphone to record voice notes and video attachments.</string>
+	<string>Teamzo needs the microphone to record voice notes and video attachments.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Flowexa uses Face ID to unlock the app and protect sensitive customer data.</string>
+	<string>Teamzo uses Face ID to unlock the app and protect sensitive customer data.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Flowexa checks your location when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat.</string>
+	<string>Teamzo checks your location when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Flowexa</string>
+	<string>Teamzo</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -27,7 +27,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Flowexa</string>
+	<string>Teamzo</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

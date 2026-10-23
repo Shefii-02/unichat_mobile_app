@@ -27,7 +27,20 @@ Color _hex(String? h) {
 String _toHex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 Color _ink(Color c) => c.computeLuminance() < 0.4 ? Colors.white : const Color(0xFF1F2937);
 
-/// Wrap the app's navigator with this (MaterialApp.builder). Renders nothing until signed in and unlocked.
+/// Settings switch: show the floating notes / to-do circles on the Home page (device-local, default on).
+const kStickyEnabledKey = 'sticky_enabled';
+class StickyEnabledNotifier extends Notifier<bool> {
+  @override
+  bool build() => LocalStorage.getBool(kStickyEnabledKey, defaultValue: true);
+  void set(bool v) {
+    state = v;
+    LocalStorage.setBool(kStickyEnabledKey, v);
+  }
+}
+
+final stickyEnabledProvider = NotifierProvider<StickyEnabledNotifier, bool>(StickyEnabledNotifier.new);
+
+/// Wrap the Home page with this. Renders nothing until signed in and unlocked.
 class StickyOverlay extends ConsumerWidget {
   const StickyOverlay({super.key, required this.child});
   final Widget? child;
@@ -36,8 +49,9 @@ class StickyOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).value;
     final locked = ref.watch(appLockProvider.select((s) => s.locked));
+    final enabled = ref.watch(stickyEnabledProvider);
     final base = child ?? const SizedBox.shrink();
-    if (user == null || locked) return base;
+    if (user == null || locked || !enabled) return base;
     return Stack(
       children: [
         base,
@@ -170,10 +184,10 @@ class _StickyLayerState extends State<_StickyLayer> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final screen = mq.size;
-    final bottomSafe = mq.padding.bottom + kBottomNavigationBarHeight;
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, c) => _buildLayer(context, c.biggest));
+
+  Widget _buildLayer(BuildContext context, Size screen) {
+    const bottomSafe = 0.0;
     final notesFallback = Offset(screen.width - _bubble - 14, screen.height - _bubble - bottomSafe - 90);
     final todoFallback = Offset(notesFallback.dx - _bubble - 12, notesFallback.dy);
     final notesPos = _clamp(_pos['notes'] ?? notesFallback, screen, const Size(_bubble, _bubble));
@@ -244,16 +258,19 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The hit area is larger than the circle: children outside a Stack's bounds can't be tapped, so the pill
+    // and error bubble need to live inside it (the empty parts don't swallow touches).
+    const padX = 74.0, padTop = 100.0;
     return Positioned(
-      left: pos.dx,
-      top: pos.dy,
-      width: _bubble,
-      height: _bubble,
+      left: pos.dx - padX,
+      top: pos.dy - padTop,
+      width: _bubble + padX * 2,
+      height: _bubble + padTop,
       child: Stack(clipBehavior: Clip.none, children: [
         if (pill != null)
           Positioned(
             bottom: _bubble + 8,
-            left: _bubble / 2 - 60,
+            left: padX + _bubble / 2 - 60,
             width: 120,
             child: Center(
               child: Material(
@@ -274,7 +291,7 @@ class _Bubble extends StatelessWidget {
         if (error != null)
           Positioned(
             bottom: _bubble + 46,
-            right: 0,
+            left: 0,
             width: 200,
             child: GestureDetector(
               onTap: onErrorTap,
@@ -285,6 +302,12 @@ class _Bubble extends StatelessWidget {
               ),
             ),
           ),
+        Positioned(
+          left: padX,
+          bottom: 0,
+          width: _bubble,
+          height: _bubble,
+          child: Stack(clipBehavior: Clip.none, children: [
         GestureDetector(
           onTap: onTap,
           onPanUpdate: (d) => onMove(d.delta),
@@ -321,6 +344,8 @@ class _Bubble extends StatelessWidget {
               child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
             ),
           ),
+          ]),
+        ),
       ]),
     );
   }

@@ -476,6 +476,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // `context.push('/leads')` from another tab would stack a second shell — with its own
       // second bottom nav — on top instead of switching tabs. Tab switches must use
       // `context.go(route)` (routes to the branch, see MainShell.goBranch), never `.push`.
+      // Branch order must match MainShell: home, todo, chats, explore, attendance, payroll, profile,
+      // then Leads/Target (no nav slot, still reachable via goToRoute).
       StatefulShellRoute.indexedStack(
         builder:
             (context, state, navigationShell) =>
@@ -488,12 +490,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/leads', builder: (_, __) => const LeadsPage()),
+              GoRoute(path: '/crm-tasks', builder: (_, __) => const CrmTasksAdminPage()),
             ],
           ),
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/target', builder: (_, __) => const TargetPage()),
+              GoRoute(path: '/wa-chat/chats', builder: (_, __) => const ChatsPage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/more', builder: (_, __) => const MorePage()),
             ],
           ),
           StatefulShellBranch(
@@ -520,6 +527,16 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/leads', builder: (_, __) => const LeadsPage()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/target', builder: (_, __) => const TargetPage()),
+            ],
+          ),
         ],
       ),
 
@@ -540,7 +557,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       // straight from the gateway — see wa-chat/pages/Chats.tsx on the web) and pushes
       // straight to WaSessionChatRoomPage itself rather than a nested go_router route,
       // since a chat's identity (WA JID) only makes sense alongside its session/api key.
-      GoRoute(path: '/wa-chat/chats', builder: (_, __) => const ChatsPage()),
       GoRoute(
         path: '/contacts',
         builder: (_, __) => const ContactsPage(),
@@ -567,7 +583,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      GoRoute(path: '/more', builder: (_, __) => const MorePage()),
 
       GoRoute(
         path: '/notifications',
@@ -602,7 +617,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // One flat route per catalogue module.
-      for (final route in moduleRoutes)
+      for (final route in moduleRoutes.where((r) => r != '/crm-tasks')) // '/crm-tasks' is a shell tab
         GoRoute(path: route, builder: (_, s) => _pageForModuleRoute(route, s)),
     ],
   );

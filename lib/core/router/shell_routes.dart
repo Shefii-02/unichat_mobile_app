@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 /// route these through [goToRoute] rather than a raw `context.push`, which would stack a
 /// second shell — and a second bottom nav — on top of the current one instead of switching
 /// tabs.
-const shellBranchRoutes = {'/home', '/leads', '/target', '/attendance', '/payroll', '/profile'};
+const shellBranchRoutes = {'/home', '/leads', '/target', '/attendance', '/payroll', '/profile', '/crm-tasks', '/wa-chat/chats', '/more'};
 
 extension ShellAwareNavigation on BuildContext {
   /// Switches tabs (via `go`) if [route] is a bottom-nav branch root, otherwise pushes it as

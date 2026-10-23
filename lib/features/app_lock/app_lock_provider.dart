@@ -120,7 +120,7 @@ class AppLockNotifier extends Notifier<AppLockState> {
     if (!state.biometricEnabled) return false;
     try {
       final ok = await _localAuth.authenticate(
-        localizedReason: 'Unlock Flowexa',
+        localizedReason: 'Unlock Teamzo',
         options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
       );
       if (ok) state = state.copyWith(locked: false, justAuthenticated: false);
@@ -151,7 +151,7 @@ class AppLockNotifier extends Notifier<AppLockState> {
   Future<String?> enableBiometric() async {
     try {
       final ok = await _localAuth.authenticate(
-        localizedReason: 'Confirm biometric unlock for Flowexa',
+        localizedReason: 'Confirm biometric unlock for Teamzo',
         options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
       );
       if (!ok) return 'Biometric check was cancelled.';

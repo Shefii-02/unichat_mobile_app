@@ -1,5 +1,5 @@
 name: unichat_mobile_app
-description: "Flowexa — WhatsApp Business CRM & AI automation, mobile app"
+description: "Teamzo — WhatsApp Business CRM & AI automation, mobile app"
 #publish_to: 'none'
 version: 1.0.0+1
 
@@ -81,6 +81,7 @@ dependencies:
   package_info_plus: ^9.0.1
   new_version_plus: ^1.0.1
   crypto: ^3.0.7
+  google_fonts: ^8.2.1
 
 dev_dependencies:
   flutter_test:
@@ -92,6 +93,7 @@ flutter:
   generate: true
   assets:
     - assets/images/
+    - assets/logo/
     - assets/icons/
     - assets/animations/
     - assets/sounds/

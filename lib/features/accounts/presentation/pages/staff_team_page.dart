@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/staff_access_sheet.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
@@ -43,6 +44,7 @@ class StaffTeamPage extends ConsumerWidget {
                 StatusPill(active ? 'active' : 'inactive'),
                 RowMenu(items: PermissionGuard.can('staff.manage') ? [
                   ('Edit', Icons.edit_rounded, () => _edit(context, ref, s)),
+                  ('Access (portal / mobile / sections)', Icons.admin_panel_settings_rounded, () => showStaffAccessSheet(context, s)),
                   (
                     active ? 'Deactivate' : 'Activate',
                     Icons.toggle_on_rounded,

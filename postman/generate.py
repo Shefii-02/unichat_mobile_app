@@ -461,7 +461,7 @@ def main():
             "name": "Flowexa Mobile API",
             "description": (
                 "REST API for the Flowexa mobile app (`unichat_mobile_app`).\n\n"
-                "Base URL: `https://flowexa-api.univexa.in/api/v1`\n\n"
+                "Base URL: `https://api.teamzo.io/api/v1`\n\n"
                 "## Auth\n"
                 "1. Run **Auth · Device Login → POST device-auth/check** with a PIN or QR "
                 "`token` from the web app (Settings → Devices → Link a device).\n"
@@ -484,7 +484,7 @@ def main():
             }
         ],
         "variable": [
-            {"key": "baseUrl", "value": "https://flowexa-api.univexa.in/api/v1"},
+            {"key": "baseUrl", "value": "https://api.teamzo.io/api/v1"},
             {"key": "token", "value": ""},
             {"key": "deviceUid", "value": "postman-" + "test-device"},
         ],

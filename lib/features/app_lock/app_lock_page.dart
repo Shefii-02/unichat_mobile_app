@@ -352,7 +352,7 @@ class _SetupOrResetViewState extends ConsumerState<_SetupOrResetView> {
                 widget.isReset
                     ? "You already have an app lock PIN on this phone. Set a new one now, "
                         'or tap Skip above to turn app lock off entirely for this device.'
-                    : 'A $_pinLength-digit PIN to quickly unlock Flowexa on this phone.',
+                    : 'A $_pinLength-digit PIN to quickly unlock Teamzo on this phone.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: context.mutedColor, fontSize: 13, height: 1.4),
               ),

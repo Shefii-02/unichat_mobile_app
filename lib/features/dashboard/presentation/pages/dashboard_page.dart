@@ -149,7 +149,7 @@ class DashboardPage extends ConsumerWidget {
                             ),
                             const SizedBox(height: 2),
                             const Text(
-                              'UniChat CRM Dashboard',
+                              'Teamzo CRM Dashboard',
                               style: TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                           ],

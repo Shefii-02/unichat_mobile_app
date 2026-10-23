@@ -1,3 +1,4 @@
+import 'package:unichat_mobile_app/core/widgets/teamzo_wordmark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -112,22 +113,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                       }),
                     ),
                     const Spacer(),
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Icon(Icons.bolt_rounded,
-                          color: Colors.white, size: 38),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Image.asset('assets/logo/teamzo-icon-tight.png', width: 64, height: 64),
                     ),
                     const SizedBox(height: 14),
-                    Text('Flowexa',
-                        style: theme.textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    const TeamzoWordmark(size: 34),
                     const SizedBox(height: 4),
-                    Text('WhatsApp Business, on autopilot',
+                    Text('One team. One app.',
                         style: TextStyle(color: context.mutedColor)),
                     const Spacer(),
                     FilledButton(

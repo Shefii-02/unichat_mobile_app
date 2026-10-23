@@ -33,7 +33,7 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
 
     <application
-        android:label="Flowexa"
+        android:label="Teamzo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

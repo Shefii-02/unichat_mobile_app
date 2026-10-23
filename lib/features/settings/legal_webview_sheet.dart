@@ -5,7 +5,7 @@ import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 /// Shows [title] (loaded from [url]) in a near-full-height modal bottom sheet with an
 /// embedded webview — used for Privacy Policy / Terms of Service.
 ///
-/// NOTE: [url] here is a placeholder (flowexa.app/legal/...) pending the real hosted pages —
+/// NOTE: [url] here is a placeholder (teamzo.io/legal/...) pending the real hosted pages —
 /// swap it for the actual URL once available.
 void showLegalSheet(BuildContext context, {required String title, required String url}) {
   showModalBottomSheet(
