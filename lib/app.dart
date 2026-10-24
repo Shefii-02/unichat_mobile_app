@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:unichat_mobile_app/services/push_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:overlay_support/overlay_support.dart';
@@ -30,6 +31,11 @@ class _FlowexaAppState extends ConsumerState<FlowexaApp> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authProvider, (prev, next) {
+      final was = prev?.value != null;
+      final now = next.value != null;
+      if (now && !was) PushService.instance.register();
+    });
     final router = ref.watch(routerProvider);
     final mode = ref.watch(themeModeProvider);
 

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart';
+import 'package:unichat_mobile_app/features/attendance/widgets/swipe_action_button.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
 import 'package:unichat_mobile_app/features/attendance/leave_request.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
@@ -129,15 +130,13 @@ class ClockInRequiredPage extends ConsumerWidget {
                   const SizedBox(height: 28),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => _act(context, ref,
+                    child: SwipeActionButton(
+                      label: onBreak ? 'End break' : 'Clock in',
+                      icon: onBreak ? Icons.play_arrow_rounded : Icons.login_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                      height: 54,
+                      onSwipe: () => _act(context, ref,
                           onBreak: onBreak, from: from, settings: settings),
-                      icon: Icon(
-                        onBreak
-                            ? Icons.play_arrow_rounded
-                            : Icons.login_rounded,
-                      ),
-                      label: Text(onBreak ? 'End break' : 'Clock in'),
                     ),
                   ),
                   if (!onBreak) ...[

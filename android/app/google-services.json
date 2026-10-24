@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "310581291802",
+    "project_id": "teamzo-push-app",
+    "storage_bucket": "teamzo-push-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:310581291802:android:57c276204db637e7369aa3",
+        "android_client_info": {
+          "package_name": "com.univexa.teamzo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvErN0qs4sZ5hMVQZVc3xvyLv9tWioVc4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

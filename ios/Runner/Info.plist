@@ -4,18 +4,6 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>Teamzo uses the camera to scan the QR code that links this device to your account, and to attach photos to chats.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Teamzo needs access to your photos so you can send images and videos in chats and campaigns.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Teamzo saves media you receive in chats to your photo library.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Teamzo needs the microphone to record voice notes and video attachments.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Teamzo uses Face ID to unlock the app and protect sensitive customer data.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Teamzo checks your location when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -38,6 +26,18 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Teamzo uses the camera to scan the QR code that links this device to your account, and to attach photos to chats.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Teamzo uses Face ID to unlock the app and protect sensitive customer data.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Teamzo checks your location when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Teamzo needs the microphone to record voice notes and video attachments.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Teamzo saves media you receive in chats to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Teamzo needs access to your photos so you can send images and videos in chats and campaigns.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -61,6 +61,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

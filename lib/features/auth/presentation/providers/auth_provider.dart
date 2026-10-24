@@ -1,3 +1,4 @@
+import 'package:unichat_mobile_app/services/push_service.dart';
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/storage/secure_storage.dart';
@@ -81,6 +82,7 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
   /// so their app-lock PIN habit on this physical phone shouldn't get reset just because a
   /// session quietly expired while they were away.
   Future<void> logout({bool clearAppLock = false}) async {
+    await PushService.instance.unregister();
     await ref.read(deviceAuthRepositoryProvider).logout();
     await ref.read(authRepositoryProvider).logout();
     if (clearAppLock) await ref.read(appLockProvider.notifier).disableMpin();

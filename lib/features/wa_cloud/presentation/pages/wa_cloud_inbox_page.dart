@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
+import 'package:unichat_mobile_app/features/wa_cloud/presentation/widgets/inbox_media.dart';
 
 /// WA Cloud team inbox — the same conversations the web `/wa-cloud/inbox` shows, with the
 /// Unread / All / Mine / Unassigned tabs.
@@ -115,7 +116,7 @@ class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
     final body = content is Map ? content['body'] : null;
     if (body != null && '$body'.isNotEmpty) return '$body';
     final type = '${last['type'] ?? ''}';
-    return type.isNotEmpty && type != 'text' ? '[$type]' : '';
+    return type.isNotEmpty && type != 'text' ? _mediaLabel(type) : '';
   }
 
   @override
@@ -337,7 +338,7 @@ class _ThreadPageState extends State<_ThreadPage> {
       if (c['template'] != null) return '[Template] ${c['template']}';
     }
     final t = '${m['type'] ?? ''}';
-    return t.isEmpty || t == 'text' ? '' : '[$t]';
+    return t.isEmpty || t == 'text' ? '' : _mediaLabel(t);
   }
 
   @override
@@ -414,6 +415,11 @@ class _ThreadPageState extends State<_ThreadPage> {
     final out = m['direction'] == 'outbound';
     final failed = m['status'] == 'failed';
     final text = _text(m);
+    final c = m['content'];
+    final media = c is Map && c['media'] is Map ? c['media'] as Map : null;
+    final mediaType = '${m['type'] ?? ''}';
+    final hasMedia = media != null && '${media['url'] ?? ''}'.isNotEmpty;
+    final textColor = Theme.of(context).colorScheme.onSurface;
     return Align(
       alignment: out ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -426,6 +432,8 @@ class _ThreadPageState extends State<_ThreadPage> {
           border: Border.all(color: failed ? AppPalette.danger : context.lineColor),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (hasMedia) InboxMedia(type: mediaType, media: media, textColor: textColor),
+          if (hasMedia && text.isNotEmpty) const SizedBox(height: 6),
           if (text.isNotEmpty) Text(text),
           const SizedBox(height: 3),
           Text(
@@ -439,3 +447,13 @@ class _ThreadPageState extends State<_ThreadPage> {
     );
   }
 }
+
+String _mediaLabel(String type) => switch (type) {
+      'image' => 'Photo',
+      'video' => 'Video',
+      'audio' => 'Voice message',
+      'document' => 'Document',
+      'sticker' => 'Sticker',
+      'location' => 'Location',
+      _ => '[$type]',
+    };

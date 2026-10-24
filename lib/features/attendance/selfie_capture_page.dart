@@ -3,8 +3,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
-/// Round, selfie-verification-style camera screen: live front-camera preview
-/// inside a circular frame, a shutter button, and — once a shot is taken — a
+/// Selfie camera screen: live front-camera preview at its normal aspect ratio, a shutter button, and — once a shot is taken — a
 /// review step with Retake / OK before the photo is handed back to the
 /// caller. Pushed with `Navigator.push<XFile>`; returns null if cancelled.
 class SelfieCapturePage extends StatefulWidget {
@@ -82,112 +81,80 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
+    // Modal card (same look as the web "Take a selfie" dialog) — shown via showDialog.
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Align(
-              alignment: Alignment.topLeft,
-              child: IconButton(
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
+            Text(_captured == null ? '📷 Take a selfie' : '📷 Use this photo?',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: ColoredBox(color: Colors.black, child: Center(child: _frame())),
             ),
-            const SizedBox(height: 8),
-            Text(
-              _captured == null ? 'Position your face in the circle' : 'Use this photo?',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            Expanded(child: Center(child: _frame())),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 32, top: 16),
-              child: _captured == null ? _shutter() : _reviewActions(),
-            ),
+            const SizedBox(height: 14),
+            _actions(),
           ],
         ),
       ),
     );
   }
 
+  Widget _actions() {
+    if (_captured != null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          TextButton(onPressed: _retake, child: const Text('Retake')),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, _captured),
+            child: const Text('Use photo'),
+          ),
+        ],
+      );
+    }
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        const SizedBox(width: 8),
+        if (_error == null)
+          FilledButton(
+            onPressed: _initializing ? null : _capture,
+            child: const Text('Capture'),
+          ),
+      ],
+    );
+  }
+
   Widget _frame() {
     if (_error != null) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.all(24),
         child: Text(_error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70)),
+            textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
       );
     }
-    if (_initializing) {
-      return const CircularProgressIndicator(color: Colors.white);
+    final c = _controller;
+    if (_initializing || c == null || !c.value.isInitialized) {
+      return const SizedBox(
+        height: 260,
+        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
     }
-
-    const size = 280.0;
-    Widget inner;
-    if (_captured != null) {
-      inner = Image.file(File(_captured!.path), fit: BoxFit.cover);
-    } else {
-      final c = _controller;
-      inner = (c == null || !c.value.isInitialized)
-          ? const SizedBox()
-          : Transform.scale(scaleX: -1, child: CameraPreview(c));
-    }
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-      ),
-      child: ClipOval(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: FittedBox(fit: BoxFit.cover, child: SizedBox(width: size, height: size, child: inner)),
-        ),
-      ),
-    );
-  }
-
-  Widget _shutter() {
-    if (_error != null || _initializing) return const SizedBox(height: 72);
-    return GestureDetector(
-      onTap: _capture,
-      child: Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 4),
-        ),
-        child: Container(
-          margin: const EdgeInsets.all(4),
-          decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-        ),
-      ),
-    );
-  }
-
-  Widget _reviewActions() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white, side: const BorderSide(color: Colors.white)),
-          onPressed: _retake,
-          icon: const Icon(Icons.replay_rounded),
-          label: const Text('Retake'),
-        ),
-        const SizedBox(width: 16),
-        FilledButton.icon(
-          onPressed: () => Navigator.pop(context, _captured),
-          icon: const Icon(Icons.check_rounded),
-          label: const Text('OK'),
-        ),
-      ],
+    final ratio = 1 / c.value.aspectRatio;
+    return AspectRatio(
+      aspectRatio: ratio,
+      child: _captured != null
+          ? Image.file(File(_captured!.path), fit: BoxFit.cover)
+          : Transform.scale(scaleX: -1, child: CameraPreview(c)),
     );
   }
 }

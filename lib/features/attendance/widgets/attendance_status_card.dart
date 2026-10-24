@@ -7,6 +7,7 @@ import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
+import 'package:unichat_mobile_app/features/attendance/widgets/swipe_action_button.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 
 /// Today's clock-in/out + break status card — status dot, break-in/break-out/worked-today
@@ -55,7 +56,7 @@ class AttendanceStatusCard extends ConsumerWidget {
         } else if (dayDone) {
           cardBg = M.attBg;
           dotColor = context.mutedColor;
-          title = 'Day complete';
+          title = 'Clocked out';
         } else if (clockedIn) {
           cardBg = M.attBg;
           dotColor = M.attDot;
@@ -98,54 +99,29 @@ class AttendanceStatusCard extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              if (!clockedIn && !dayDone)
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: M.attMuted),
-                    onPressed: () => _run(context, ref, 'clock_in', settings),
-                    icon: const Icon(Icons.login_rounded, size: 18),
-                    label: const Text('Clock in'),
-                  ),
+              if (!clockedIn)
+                SwipeActionButton(
+                  label: dayDone ? 'Clock in again' : 'Clock in',
+                  icon: Icons.login_rounded,
+                  color: M.attMuted,
+                  onSwipe: () => _run(context, ref, 'clock_in', settings),
                 )
-              else if (clockedIn)
-                Row(
-                  children: [
-                    Expanded(
-                      child: SizedBox(
-                        height: 38,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: M.attMuted,
-                            side: const BorderSide(color: M.attBtnBorder),
-                            padding: EdgeInsets.zero,
-                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                          ),
-                          onPressed: () =>
-                              _run(context, ref, onBreak ? 'break_end' : 'break_start', settings),
-                          child: Text(onBreak ? 'End break' : 'Take break'),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: SizedBox(
-                        height: 38,
-                        child: FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: M.attMuted,
-                            padding: EdgeInsets.zero,
-                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                          ),
-                          onPressed: onBreak ? null : () => _run(context, ref, 'clock_out', settings),
-                          child: const Text('Clock out'),
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              else if (dayDone)
-                _ReopenRequestSection(reopenStatus: today['reopen_status'] as String?, onSubmit: () => _reopen(context, ref)),
+              else ...[
+                SwipeActionButton(
+                  label: onBreak ? 'End break' : 'Take break',
+                  icon: onBreak ? Icons.play_arrow_rounded : Icons.free_breakfast_rounded,
+                  color: M.amberMuted,
+                  onSwipe: () => _run(context, ref, onBreak ? 'break_end' : 'break_start', settings),
+                ),
+                const SizedBox(height: 8),
+                SwipeActionButton(
+                  label: 'Clock out',
+                  icon: Icons.logout_rounded,
+                  color: M.attMuted,
+                  enabled: !onBreak,
+                  onSwipe: () => _run(context, ref, 'clock_out', settings),
+                ),
+              ],
             ],
           ),
         );
@@ -163,11 +139,6 @@ class AttendanceStatusCard extends ConsumerWidget {
     ref.read(attendanceGateProvider.notifier).refresh();
   }
 
-  Future<void> _reopen(BuildContext context, WidgetRef ref) async {
-    final ok = await requestAttendanceReopen(context);
-    if (ok) ref.invalidate(hrAttendanceMeProvider);
-  }
-
   static String _hm(Object? minutes) {
     final m = int.tryParse('${minutes ?? 0}') ?? 0;
     return '${m ~/ 60}h ${m % 60}m';
@@ -181,48 +152,6 @@ class AttendanceStatusCard extends ConsumerWidget {
     final raw = today?['work_date'];
     final parsed = raw != null ? DateTime.tryParse('$raw') : null;
     return DateFormat('EEE, d MMM').format(parsed ?? DateTime.now());
-  }
-}
-
-/// Shown in place of the clock-in/out buttons once the day is done — the only way back in
-/// after a clock-out is a manager-approved reopen request (see `requestAttendanceReopen`),
-/// never a direct re-clock-in.
-class _ReopenRequestSection extends StatelessWidget {
-  const _ReopenRequestSection({required this.reopenStatus, required this.onSubmit});
-  final String? reopenStatus;
-  final VoidCallback onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    if (reopenStatus == 'pending') {
-      return Row(
-        children: [
-          Icon(Icons.hourglass_top_rounded, size: 15, color: context.mutedColor),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text('Reopen request sent — waiting for a manager to review it.',
-                style: TextStyle(fontSize: 11.5, color: context.mutedColor)),
-          ),
-        ],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (reopenStatus == 'rejected')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('Your last reopen request was rejected.',
-                style: TextStyle(fontSize: 11.5, color: AppPalette.danger)),
-          ),
-        TextButton.icon(
-          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32)),
-          onPressed: onSubmit,
-          icon: const Icon(Icons.lock_reset_rounded, size: 16),
-          label: const Text('Accidentally clocked out? Request reopen', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-    );
   }
 }
 

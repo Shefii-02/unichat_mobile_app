@@ -30,6 +30,12 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final user = ref.watch(authProvider).value;
+    bool can(String p) =>
+        user == null ||
+        user.permissions.contains(p) ||
+        user.role == 'superadmin' ||
+        user.role == 'owner';
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -53,11 +59,15 @@ class HomePage extends ConsumerWidget {
                   child: AttendanceStatusCard(),
                 ),
                 const _PersonalStatsStrip(),
-                const _StatsStrip(),
-                const _PipelineSection(),
-                const _FollowUpsSection(),
+                // Home follows the person's effective permissions (role + access sections), so
+                // Sales / Marketing / HR / Accounts accounts each see only their own blocks.
+                if (can('dashboard.view')) const _StatsStrip(),
+                if (can('leads.view') || can('wa_agent.leads.view')) ...const [
+                  _PipelineSection(),
+                  _FollowUpsSection(),
+                ],
                 const _TodayTasks(),
-                const _NextUpCard(),
+                if (can('leads.view') || can('wa_agent.leads.view')) const _NextUpCard(),
               ],
             ),
           ),
