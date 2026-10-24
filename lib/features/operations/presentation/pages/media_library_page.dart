@@ -142,12 +142,11 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   Widget _folderTile(BuildContext context, Rec f) {
     final count = f['file_count'] ?? f['files_count'] ?? f['media_count'] ?? 0;
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
       onTap: () => _openFolder(f),
       onLongPress: () => _showFolderMenu(context, f),
       child: Column(
         children: [
-          CircleAvatar(radius: 28, backgroundColor: AppPalette.warning.withValues(alpha: 0.15), child: const Icon(Icons.folder_rounded, color: AppPalette.warning, size: 26)),
+          const Icon(Icons.folder_rounded, color: AppPalette.warning, size: 52),
           const SizedBox(height: 8),
           Text(str(f['name'], 'Folder'), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           Text('$count file${count == 1 ? '' : 's'}', style: TextStyle(fontSize: 10, color: context.mutedColor)),
@@ -161,7 +160,6 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     final url = str(m['url'], '');
     final name = str(m['display_name'] ?? m['name'] ?? m['original_name'] ?? m['filename'], 'File');
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
       onTap: () => _showFileMenu(context, m),
       onLongPress: () => _showFileMenu(context, m),
       child: Column(
@@ -177,7 +175,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
 
   Widget _fileAvatar(String mime, String url) {
     if (mime.contains('image') && url.isNotEmpty) {
-      return CircleAvatar(radius: 28, backgroundColor: Colors.grey.shade200, backgroundImage: NetworkImage(url), onBackgroundImageError: (_, __) {});
+      return Image.network(url, width: 52, height: 52, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_rounded, color: AppPalette.info, size: 52));
     }
     final (icon, color) = switch (mime) {
       final t when t.contains('video') => (Icons.videocam_rounded, AppPalette.accent),
@@ -186,7 +184,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       final t when t.contains('image') => (Icons.image_rounded, AppPalette.info),
       _ => (Icons.insert_drive_file_rounded, AppPalette.muted),
     };
-    return CircleAvatar(radius: 28, backgroundColor: color.withValues(alpha: 0.15), child: Icon(icon, color: color, size: 26));
+    return Icon(icon, color: color, size: 52);
   }
 
   void _showAddMenu(BuildContext context) {

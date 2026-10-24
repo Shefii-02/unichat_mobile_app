@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
+import 'package:unichat_mobile_app/core/nav/hidden_modules_provider.dart';
 
 /// The one persistent bottom-nav frame. Wraps a [StatefulNavigationShell] (see
 /// `StatefulShellRoute.indexedStack` in app_router.dart) — each tab keeps its own Navigator
@@ -10,7 +12,7 @@ import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 ///
 /// Seven slots; the centre "Explore" button is raised above the bar. [_Tab.branch] is the
 /// index of the shell branch in app_router.dart (Leads/Target branches have no slot).
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
   final StatefulNavigationShell navigationShell;
 
@@ -25,7 +27,8 @@ class MainShell extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(mobileHiddenModulesProvider); // loads the superadmin's hidden-tile list
     final idx = navigationShell.currentIndex;
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.of(context).padding.bottom;

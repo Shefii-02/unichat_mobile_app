@@ -24,7 +24,8 @@ class _FlowexaAppState extends ConsumerState<FlowexaApp> {
     // See DioClient.onAuthFailure's doc comment — this is what actually gets the user
     // bounced to device re-login (QR/PIN) the moment a request proves their token is dead,
     // instead of them being stuck on a broken screen until they restart the app.
-    DioClient.onAuthFailure = () => ref.read(authProvider.notifier).forceSignOut();
+    DioClient.onAuthFailure =
+        () => ref.read(authProvider.notifier).forceSignOut();
   }
 
   @override
@@ -39,6 +40,7 @@ class _FlowexaAppState extends ConsumerState<FlowexaApp> {
         darkTheme: AppTheme.dark,
         themeMode: mode,
         routerConfig: router,
+        scrollBehavior: const _AlwaysScrollBehavior(),
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
@@ -49,4 +51,16 @@ class _FlowexaAppState extends ConsumerState<FlowexaApp> {
       ),
     );
   }
+}
+
+/// Makes every scrollable overscroll-able even when its content is shorter than the
+/// screen, so pull-to-refresh works on short lists too.
+class _AlwaysScrollBehavior extends MaterialScrollBehavior {
+  const _AlwaysScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const AlwaysScrollableScrollPhysics().applyTo(
+        super.getScrollPhysics(context),
+      );
 }

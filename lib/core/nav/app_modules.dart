@@ -51,7 +51,12 @@ class AppModule {
   final String? subtitle;
   final List<ModuleSubSection> subSections;
 
+  /// Module ids the superadmin hid for the mobile app (web unaffected). Filled by
+  /// `mobileHiddenModulesProvider`; routes keep working, only the tiles disappear.
+  static Set<String> serverHidden = {};
+
   bool get visible {
+    if (serverHidden.contains(id)) return false;
     if (permission == null) return true;
     return PermissionGuard.can(permission!) ||
         PermissionGuard.canView(permission!.split('.').first);
