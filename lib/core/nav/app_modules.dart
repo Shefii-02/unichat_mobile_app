@@ -397,6 +397,18 @@ class AppModules {
       permission: 'catalog.view',
       color: Color(0xFFEA580C),
     ),
+    // Staff inbox for the website chat widget (Unread / Read / Closed + live chat) — mirrors the
+    // "Website chats" panel on the web Website Widget page; same /widgets/live/* Laravel endpoints.
+    AppModule(
+      id: 'wa_agent_widget_chats',
+      title: 'Website Chats',
+      subtitle: 'Live chat & visitors',
+      icon: Icons.forum_rounded,
+      route: '/wa-agent/widget-chats',
+      group: ModuleGroup.waAgents,
+      permission: 'widget_chat.handle',
+      color: Color(0xFF4F46E5),
+    ),
     AppModule(
       id: 'wa_agent_settings',
       title: 'Settings',

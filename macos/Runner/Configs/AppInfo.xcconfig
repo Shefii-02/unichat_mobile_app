@@ -8,7 +8,7 @@
 PRODUCT_NAME = Teamzo
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.univexa.teamzo
+PRODUCT_BUNDLE_IDENTIFIER = in.univexa.teamzo
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Univexa Technologies. All rights reserved.

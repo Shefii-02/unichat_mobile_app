@@ -55,6 +55,7 @@ import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_playbooks_page.dart';
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/lead_intelligence_page.dart';
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_logs_page.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/widget_chats_page.dart';
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/ai_config_page.dart';
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_ai_settings_page.dart';
 import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/wa_agent_catalog_page.dart';
@@ -295,6 +296,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const PipelinesPage();
     case '/wa-agent/logs':
       return const WaAgentLogsPage();
+    case '/wa-agent/widget-chats':
+      return const WidgetChatsPage();
     case '/wa-agent/lead-intelligence':
       return const LeadIntelligencePage();
     case '/wa-agent/ai-config':

@@ -1,4 +1,4 @@
-package com.univexa.teamzo
+package `in`.univexa.teamzo
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

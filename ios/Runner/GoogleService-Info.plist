@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.univexa.teamzo</string>
+	<string>in.univexa.teamzo</string>
 	<key>PROJECT_ID</key>
 	<string>teamzo-push-app</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:310581291802:ios:48449233cb1e2338369aa3</string>
+	<string>1:310581291802:ios:2ad2b3a97effa733369aa3</string>
 </dict>
 </plist>
