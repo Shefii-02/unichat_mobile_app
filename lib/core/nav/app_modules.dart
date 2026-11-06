@@ -494,6 +494,16 @@ class AppModules {
       color: Color(0xFF1877F2),
     ),
     AppModule(
+      id: 'instagram_flows',
+      title: 'Instagram Flows',
+      subtitle: 'Comment → DM journeys',
+      icon: Icons.account_tree_rounded,
+      route: '/instagram/flows',
+      group: ModuleGroup.metaInstagram,
+      permission: 'instagram.view',
+      color: Color(0xFFDD2A7B),
+    ),
+    AppModule(
       id: 'instagram_automations',
       title: 'Auto DM Rules',
       subtitle: 'Comment & DM automation',

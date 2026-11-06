@@ -27,8 +27,8 @@ class InstagramInboxPage extends ConsumerWidget {
             emptyLabel: 'No DM conversations',
             emptyIcon: Icons.forum_rounded,
             tile: (context, c) => RecordCard(
-              title: str(c['username'] ?? c['name'] ?? c['from'], 'Conversation'),
-              subtitle: str(c['last_message'] ?? c['preview'] ?? c['snippet']),
+              title: str(c['participant_username'] ?? c['username'] ?? c['participant_id'], 'Conversation'),
+              subtitle: str(c['last_message_preview'] ?? c['last_message'] ?? c['preview']),
               leadingIcon: Icons.person_rounded,
               leadingColor: const Color(0xFFE1306C),
               onTap: () => _conversation(context, ref, c),
@@ -98,15 +98,81 @@ class InstagramInboxPage extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('@${str(c['username'] ?? c['name'])}',
+            Text('@${str(c['participant_username'] ?? c['username'] ?? c['participant_id'])}',
                 style: Theme.of(ctx)
                     .textTheme
                     .titleMedium
                     ?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            Text(str(c['last_message'] ?? c['preview']),
-                style: TextStyle(color: ctx.mutedColor)),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
+            // Whole thread — bot, flow, AI, staff and Instagram-app messages all land here.
+            SizedBox(
+              height: 260,
+              child: FutureBuilder<Map<String, dynamic>>(
+                future: Api.one('/instagram/conversations/${c['id']}'),
+                builder: (ctx, snap) {
+                  final msgs = ((snap.data?['messages'] as List?) ?? const [])
+                      .whereType<Map>()
+                      .toList();
+                  if (snap.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (msgs.isEmpty) {
+                    return Text('No messages yet.',
+                        style: TextStyle(color: ctx.mutedColor));
+                  }
+                  const labels = {
+                    'flow': 'Flow',
+                    'automation': 'Automation',
+                    'ai': 'AI agent',
+                    'manual': 'You',
+                    'staff_app': 'Instagram app',
+                  };
+                  return ListView(
+                    children: [
+                      for (final m in msgs)
+                        Align(
+                          alignment: m['direction'] == 'out'
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            constraints: BoxConstraints(
+                                maxWidth: MediaQuery.of(ctx).size.width * 0.75),
+                            decoration: BoxDecoration(
+                              color: m['direction'] == 'out'
+                                  ? const Color(0xFFE1306C)
+                                  : Colors.grey.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(str(m['text'], ''),
+                                    style: TextStyle(
+                                        color: m['direction'] == 'out'
+                                            ? Colors.white
+                                            : null)),
+                                if (m['direction'] == 'out' &&
+                                    labels[m['source']] != null)
+                                  Text(labels[m['source']]!,
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: m['direction'] == 'out'
+                                              ? Colors.white70
+                                              : ctx.mutedColor)),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
             TextField(
               controller: controller,
               minLines: 1,
@@ -138,7 +204,7 @@ class InstagramInboxPage extends ConsumerWidget {
                       final ok = await runAction(
                         context,
                         () => Api.post('/instagram/conversations/${c['id']}/reply',
-                            data: {'message': controller.text.trim()}),
+                            data: {'text': controller.text.trim()}),
                         success: 'Sent',
                       );
                       if (ok) ref.invalidate(igConversationsProvider);

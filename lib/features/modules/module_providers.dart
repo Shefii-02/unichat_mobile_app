@@ -50,6 +50,8 @@ final igConversationsProvider =
     FutureProvider((ref) => Api.list('/instagram/conversations'));
 final igAutomationsProvider =
     FutureProvider((ref) => Api.list('/instagram/automations'));
+final igFlowsProvider =
+    FutureProvider((ref) => Api.list('/instagram/flows'));
 final igAccountMediaProvider =
     FutureProvider.family<List<Map<String, dynamic>>, int>(
         (ref, accountId) => Api.list('/instagram/accounts/$accountId/media'));

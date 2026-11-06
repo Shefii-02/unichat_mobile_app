@@ -61,6 +61,8 @@ class Api {
           v['phone_numbers'] ??
           v['accounts'] ??
           v['automations'] ??
+          v['flows'] ??
+          v['runs'] ??
           v['builders'] ??
           v['forms'] ??
           v['roles'] ??

@@ -16,6 +16,7 @@ class SocketService {
   final _assignmentCtrl   = StreamController<Map<String, dynamic>>.broadcast();
   final _slaCtrl          = StreamController<Map<String, dynamic>>.broadcast();
   final _connectCtrl      = StreamController<bool>.broadcast();
+  final _widgetChatCtrl   = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get leadNotifications => _leadNotifCtrl.stream;
   Stream<Map<String, dynamic>> get aiHandoffOffers   => _aiOfferCtrl.stream;
@@ -23,13 +24,16 @@ class SocketService {
   Stream<Map<String, dynamic>> get assignmentUpdates => _assignmentCtrl.stream;
   Stream<Map<String, dynamic>> get slaAlerts         => _slaCtrl.stream;
   Stream<bool>                 get connectionState   => _connectCtrl.stream;
+  /// Website-chat changes pushed by backend-node: {conversation_id, kind, message?}.
+  Stream<Map<String, dynamic>> get widgetChatUpdates => _widgetChatCtrl.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
   void connect(String token, int staffId, int companyId) {
     _staffId = staffId;
     _socket = io.io(
-      ApiConstants.socketUrl,
+      // The Node gateway lives on the /staff namespace (the default namespace has no handlers).
+      '${ApiConstants.socketUrl}/staff',
       io.OptionBuilder()
         .setTransports(['websocket'])
         .enableAutoConnect()
@@ -56,6 +60,7 @@ class SocketService {
     _socket!.on('new_message',             (d) => _messageCtrl.add(_toMap(d)));
     _socket!.on('lead_assignment_update',  (d) => _assignmentCtrl.add(_toMap(d)));
     _socket!.on('sla_breach',              (d) => _slaCtrl.add(_toMap(d)));
+    _socket!.on('widget_chat_update',      (d) => _widgetChatCtrl.add(_toMap(d)));
   }
 
   void disconnect() {

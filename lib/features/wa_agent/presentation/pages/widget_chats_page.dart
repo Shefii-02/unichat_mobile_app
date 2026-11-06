@@ -1,6 +1,7 @@
 // Website chat inbox for staff — mirrors the "Website chats" panel on the web Website Widget page
-// (frontend/src/pages/wa-agent/widget/LiveChatPanel.tsx): Unread / Read / Closed tabs, plus live
-// chat handling (accept, reply, end). Polls the same Laravel /widgets/live/* endpoints.
+// (frontend/src/pages/wa-agent/widget/chats): Unread / Read / Closed tabs, plus live chat handling
+// (accept, reply, end). Served by backend-node (/api/widget-chat/*) and kept current by socket pushes —
+// polling only as a slow fallback while the socket is down. Photos / voice / files still upload via Laravel.
 import 'dart:async';
 import 'dart:io';
 
@@ -12,10 +13,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:unichat_mobile_app/core/network/dio_client.dart';
+import 'package:unichat_mobile_app/core/socket/socket_service.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 const _tabs = [('unread', 'Unread'), ('read', 'Read'), ('closed', 'Closed')];
-const _poll = Duration(seconds: 3);
+const _fallbackPoll = Duration(seconds: 30); // only while the realtime socket is down
+const _node = '/api/widget-chat';
 const _maxBytes = 2 * 1024 * 1024; // chat files are capped at 2 MB (also enforced server-side)
 const _emojis = ['😀', '😁', '😂', '🤣', '😊', '😍', '😘', '😎', '🤔', '😢', '😭', '😡', '👍', '👎', '👏', '🙏', '🙌', '💪', '🎉', '🔥', '❤️', '💯', '✅', '❌', '👋', '🤝', '😅', '😉', '🙂', '😇'];
 
@@ -31,12 +35,18 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
   Map<String, int> _counts = {'unread': 0, 'read': 0, 'closed': 0};
   bool _loading = true;
   Timer? _timer;
+  StreamSubscription? _wsSub;
+  StreamSubscription? _connSub;
   final _seenWaiting = <int>{};
   bool _firstLoad = true;
   bool _muted = false;
   bool _forbidden = false;
   int _handling = 0;
   int _limit = 5;
+  String _q = '';
+  String? _openKey;
+  Timer? _debounce;
+  Timer? _pushDebounce;
 
   String get _tab => _tabs[_tc.index].$1;
 
@@ -44,12 +54,22 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
   void initState() {
     super.initState();
     _load();
-    _timer = Timer.periodic(_poll, (_) => _load(silent: true));
+    // Realtime: any change pushed by the server → refresh the list (debounced). Reconnect → resync.
+    _wsSub = SocketService().widgetChatUpdates.listen((_) {
+      _pushDebounce?.cancel();
+      _pushDebounce = Timer(const Duration(milliseconds: 400), () => _load(silent: true));
+    });
+    _connSub = SocketService().connectionState.listen((up) { if (up) _load(silent: true); });
+    _timer = Timer.periodic(_fallbackPoll, (_) { if (!SocketService().isConnected) _load(silent: true); });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _wsSub?.cancel();
+    _connSub?.cancel();
+    _pushDebounce?.cancel();
+    _debounce?.cancel();
     _tc.dispose();
     super.dispose();
   }
@@ -63,12 +83,12 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
   Future<void> _load({bool silent = false}) async {
     final tab = _tab;
     try {
-      final me = await Api.raw.get('/widgets/live/me');
+      final me = await DioClient.nodeDio.get('$_node/me');
       final m = (me.data as Map).cast<String, dynamic>();
       _muted = m['muted'] == true;
       _handling = (m['handling'] as num?)?.toInt() ?? 0;
       _limit = (m['limit'] as num?)?.toInt() ?? 5;
-      final res = await Api.raw.get('/widgets/live/inbox', queryParameters: {'tab': tab});
+      final res = await DioClient.nodeDio.get('$_node/inbox', queryParameters: {'tab': tab, 'per_page': 100, if (_q.isNotEmpty) 'q': _q});
       final body = (res.data as Map).cast<String, dynamic>();
       final list = (body['data'] as List? ?? []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
       final c = (body['counts'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -98,9 +118,53 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
     }
   }
 
+  // Same visitor (mobile number, else name) → one group; rows arrive latest-first so a group's first row is its latest chat.
+  List<List<Rec>> get _groups {
+    final m = <String, List<Rec>>{};
+    for (final r in _rows) {
+      final phone = (r['visitor_phone'] ?? '').toString().replaceAll(RegExp(r'\D+'), '');
+      final name = (r['visitor_name'] ?? '').toString().trim().toLowerCase();
+      final key = phone.isNotEmpty ? phone : (name.isNotEmpty ? 'n:$name' : 'id:${r['id']}');
+      (m[key] ??= []).add(r);
+    }
+    return m.values.toList();
+  }
+
+  String _groupKey(Rec r) {
+    final phone = (r['visitor_phone'] ?? '').toString().replaceAll(RegExp(r'\D+'), '');
+    final name = (r['visitor_name'] ?? '').toString().trim().toLowerCase();
+    return phone.isNotEmpty ? phone : (name.isNotEmpty ? 'n:$name' : 'id:${r['id']}');
+  }
+
+  Widget _pill(String t, Color c) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: c.withValues(alpha: .12), borderRadius: BorderRadius.circular(99)),
+        child: Text(t, style: TextStyle(fontSize: 11, color: c, fontWeight: FontWeight.w600)),
+      );
+
+  // Live state wins; otherwise the case status (Pending / Unread / Attended / Solved), plus 🚩 when flagged.
+  Widget? _badge(Rec r) {
+    final live = r['live_status'];
+    final cs = r['case_status'];
+    Widget? w = switch (live) {
+      'waiting' => _pill('Waiting', Colors.orange),
+      'live' => _pill('Live', Colors.green),
+      'missed' => _pill(r['callback_confirmed_at'] != null ? 'Call back' : 'Missed', Colors.red),
+      _ => switch (cs) {
+          'pending' => _pill('Pending', Colors.orange),
+          'unread' => _pill('Unread', Colors.red),
+          'attended' => _pill('Attended', Colors.blue),
+          'closed' => _pill('Solved', Colors.grey),
+          _ => null,
+        },
+    };
+    if (r['flagged_at'] != null) w = Row(mainAxisSize: MainAxisSize.min, children: [if (w != null) w, const SizedBox(width: 4), const Text('🚩')]);
+    return w;
+  }
+
   Future<void> _toggleMute() async {
     try {
-      final r = await Api.raw.put('/widgets/live/me', data: {'muted': !_muted});
+      final r = await DioClient.nodeDio.put('$_node/me', data: {'muted': !_muted});
       if (mounted) setState(() => _muted = (r.data as Map)['muted'] == true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
@@ -109,7 +173,7 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
 
   Future<void> _accept(Rec r) async {
     try {
-      await Api.raw.post('/widgets/live/${r['id']}/accept');
+      await DioClient.nodeDio.post('$_node/${r['id']}/accept');
       await _open(r);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
@@ -142,43 +206,75 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
           ? const Center(child: Padding(padding: EdgeInsets.all(32), child: Text("You don't have access to website live chats. Ask an admin for the “Handle Website Live Chats” permission.", textAlign: TextAlign.center)))
           : _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: _rows.isEmpty
-                  ? ListView(children: [Padding(padding: const EdgeInsets.all(48), child: Center(child: Text('No $_tab chats.')))])
-                  : ListView.separated(
-                      itemCount: _rows.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) => _row(_rows[i]),
-                    ),
-            ),
+          : Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: TextField(
+                  decoration: const InputDecoration(hintText: 'Search name / phone', prefixIcon: Icon(Icons.search), isDense: true, border: OutlineInputBorder()),
+                  onChanged: (v) {
+                    _debounce?.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 400), () { _q = v.trim(); _load(); });
+                  },
+                ),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _load,
+                  child: _rows.isEmpty
+                      ? ListView(children: [Padding(padding: const EdgeInsets.all(48), child: Center(child: Text('No $_tab chats.')))])
+                      : ListView(children: [for (final g in _groups) ..._group(g)]),
+                ),
+              ),
+            ]),
     );
   }
 
-  Widget _row(Rec r) {
+  List<Widget> _group(List<Rec> list) {
+    final r = list.first;
+    final multi = list.length > 1;
+    final key = _groupKey(r);
+    final expanded = _openKey == key;
+    return [
+      _row(r, count: multi ? list.length : 0, expanded: expanded, onToggle: multi ? () => setState(() => _openKey = expanded ? null : key) : null),
+      const Divider(height: 1),
+      if (multi && expanded)
+        for (final c in list) ...[
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.only(left: 28, right: 16),
+            tileColor: Colors.grey.withValues(alpha: .06),
+            onTap: () => _open(c),
+            title: Row(children: [
+              Expanded(child: Text(c['last_message_at'] != null ? DateTime.tryParse(c['last_message_at'].toString())?.toLocal().toString().split('.').first ?? '' : '', style: const TextStyle(fontSize: 12, color: Colors.grey))),
+              if (_badge(c) != null) _badge(c)!,
+            ]),
+            subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (c['last_text'] != null) Text(c['last_text'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              if (c['live_status'] == 'waiting' || c['live_status'] == 'missed')
+                FilledButton(onPressed: () => _accept(c), child: Text(c['live_status'] == 'waiting' ? 'Accept chat' : 'Start chat')),
+            ]),
+          ),
+          const Divider(height: 1),
+        ],
+    ];
+  }
+
+  Widget _row(Rec r, {int count = 0, bool expanded = false, VoidCallback? onToggle}) {
     final live = r['live_status'] as String?;
     final canAccept = live == 'waiting' || live == 'missed';
     final unread = _tab == 'unread';
-    final chip = switch (live) {
-      'waiting' => ('Waiting', Colors.orange),
-      'live' => ('Live', Colors.green),
-      'missed' => (r['callback_confirmed_at'] != null ? 'Call back' : 'Missed', Colors.red),
-      _ => null,
-    };
+    final badge = _badge(r);
+    final by = r['staff_name'] != null && r['case_status'] == 'attended' ? ' · by ${r['staff_name']}' : '';
     return ListTile(
-      onTap: () => _open(r),
+      onTap: () { _open(r); onToggle?.call(); },
       title: Row(children: [
         Expanded(child: Text((r['visitor_name'] ?? 'Visitor').toString(),
             style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500), overflow: TextOverflow.ellipsis)),
-        if (chip != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(color: chip.$2.withValues(alpha: .12), borderRadius: BorderRadius.circular(99)),
-            child: Text(chip.$1, style: TextStyle(fontSize: 11, color: chip.$2, fontWeight: FontWeight.w600)),
-          ),
+        if (count > 0) Padding(padding: const EdgeInsets.only(right: 6), child: _pill('$count chats ${expanded ? '▴' : '▾'}', Colors.grey)),
+        if (badge != null) badge,
       ]),
       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('${r['visitor_phone'] ?? 'No number'} · ${(r['widget'] as Map?)?['name'] ?? ''}', style: const TextStyle(fontSize: 12)),
+        Text('${r['visitor_phone'] ?? 'No number'} · ${(r['widget'] as Map?)?['name'] ?? ''}$by', style: const TextStyle(fontSize: 12)),
         if (r['last_text'] != null) Text(r['last_text'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         if (canAccept)
           Padding(
@@ -210,18 +306,31 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
   String? _playingUrl;
   int _lastId = 0;
   Timer? _timer;
+  Timer? _pushDebounce;
+  StreamSubscription? _wsSub;
+  StreamSubscription? _connSub;
 
   @override
   void initState() {
     super.initState();
     _fetch();
-    _timer = Timer.periodic(_poll, (_) => _fetch());
+    // Realtime: pushes for THIS conversation → catch up since the last message id. No polling while the socket is up.
+    _wsSub = SocketService().widgetChatUpdates.listen((e) {
+      if ((e['conversation_id'] as num?)?.toInt() != widget.id) return;
+      _pushDebounce?.cancel();
+      _pushDebounce = Timer(const Duration(milliseconds: 150), _fetch);
+    });
+    _connSub = SocketService().connectionState.listen((up) { if (up) _fetch(); });
+    _timer = Timer.periodic(_fallbackPoll ~/ 6, (_) { if (!SocketService().isConnected) _fetch(); });
     _player.onPlayerComplete.listen((_) { if (mounted) setState(() => _playingUrl = null); });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _wsSub?.cancel();
+    _connSub?.cancel();
+    _pushDebounce?.cancel();
     _input.dispose();
     _scroll.dispose();
     _player.dispose();
@@ -233,7 +342,7 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
   Future<void> _fetch() async {
     try {
       // Also marks the conversation read on the server.
-      final res = await Api.raw.get('/widgets/live/${widget.id}', queryParameters: {'after': _lastId});
+      final res = await DioClient.nodeDio.get('$_node/${widget.id}', queryParameters: {'after': _lastId});
       final body = (res.data as Map).cast<String, dynamic>();
       final fresh = (body['messages'] as List? ?? []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
       if (!mounted) return;
@@ -258,12 +367,18 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
       return;
     }
     try {
-      final form = FormData.fromMap({
-        if (text != null && text.isNotEmpty) 'text': text,
-        if (_replyTo != null) 'reply_to_id': _replyTo!['id'],
-        if (path != null) 'file': await MultipartFile.fromFile(path, filename: name ?? path.split('/').last),
-      });
-      await Api.raw.post('/widgets/live/${widget.id}/reply', data: form);
+      if (path == null) {
+        // Text goes straight to backend-node.
+        await DioClient.nodeDio.post('$_node/${widget.id}/reply', data: {'text': text, if (_replyTo != null) 'reply_to_id': _replyTo!['id']});
+      } else {
+        // Files are stored by Laravel; the server then pushes the new message back over the socket.
+        final form = FormData.fromMap({
+          if (text != null && text.isNotEmpty) 'text': text,
+          if (_replyTo != null) 'reply_to_id': _replyTo!['id'],
+          'file': await MultipartFile.fromFile(path, filename: name ?? path.split('/').last),
+        });
+        await Api.raw.post('/widgets/live/${widget.id}/reply', data: form);
+      }
       setState(() { _replyTo = null; _emojiOpen = false; });
       _fetch();
     } catch (e) {
@@ -311,8 +426,18 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
 
   Future<void> _end() async {
     try {
-      await Api.raw.post('/widgets/live/${widget.id}/end');
+      await DioClient.nodeDio.post('$_node/${widget.id}/end');
       if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) _snack(apiErrorMessage(e));
+    }
+  }
+
+  Future<void> _flag() async {
+    try {
+      await Api.raw.post('/widgets/live/${widget.id}/flag');
+      _snack('Marked as not satisfied — admin will review it.');
+      _fetch();
     } catch (e) {
       if (mounted) _snack(apiErrorMessage(e));
     }
@@ -385,18 +510,22 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final live = _convo['live_status'] == 'live';
+    final live = _convo['live_status'] == 'live' && _convo['status'] != 'closed';
     return Scaffold(
       appBar: AppBar(
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(widget.title, style: const TextStyle(fontSize: 16)),
-          if (_convo['visitor_phone'] != null) Text(_convo['visitor_phone'].toString(), style: const TextStyle(fontSize: 12)),
+          if (_convo['visitor_phone'] != null)
+            Text('${_convo['visitor_phone']}${_convo['lead_id'] != null ? '  ✓ Saved in Contacts & Leads' : ''}', style: const TextStyle(fontSize: 12)),
         ]),
         actions: [
           if (live) TextButton(onPressed: _end, child: const Text('End chat')),
           PopupMenuButton<String>(
-            onSelected: (v) { if (v == 'delete') _delete(); },
-            itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: Text('Delete conversation'))],
+            onSelected: (v) { if (v == 'delete') _delete(); if (v == 'flag') _flag(); },
+            itemBuilder: (_) => [
+              if (_convo['flagged_at'] == null) const PopupMenuItem(value: 'flag', child: Text('🚩 Not satisfied')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete conversation')),
+            ],
           ),
         ],
       ),

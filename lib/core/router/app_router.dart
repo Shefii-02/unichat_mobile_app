@@ -69,6 +69,7 @@ import 'package:unichat_mobile_app/features/meta_ads/presentation/pages/creative
 // Instagram
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_inbox_page.dart';
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_automations_page.dart';
+import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_flows_page.dart';
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_comments_page.dart';
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_insights_page.dart';
 // CRM & Sales
@@ -314,6 +315,8 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const InstagramInsightsPage();
     case '/instagram/automations':
       return const InstagramAutomationsPage();
+    case '/instagram/flows':
+      return const InstagramFlowsPage();
     case '/wa-agent/playbooks':
       return const WaAgentPlaybooksPage();
     case '/wa-chat/templates':
