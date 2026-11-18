@@ -229,6 +229,7 @@ class DeviceAuthRepository {
     final user = UserModel.fromJson(userMap);
     await LocalStorage.setJson(LocalStorage.kUser, user.toJson());
     PermissionGuard.setPermissions(user.permissions, user.role);
+    PermissionGuard.setEntitlements(user.entitledModules);
 
     final device = body['device'] as Map<String, dynamic>?;
     if (device != null) {

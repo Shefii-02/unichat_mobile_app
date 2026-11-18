@@ -1,6 +1,6 @@
 // Website chat inbox for staff — mirrors the "Website chats" panel on the web Website Widget page
 // (frontend/src/pages/wa-agent/widget/chats): Unread / Read / Closed tabs, plus live chat handling
-// (accept, reply, end). Served by backend-node (/api/widget-chat/*) and kept current by socket pushes —
+// (accept, reply, end). Served by chat-server (/api/widget-chat/*) and kept current by socket pushes —
 // polling only as a slow fallback while the socket is down. Photos / voice / files still upload via Laravel.
 import 'dart:async';
 import 'dart:io';
@@ -83,12 +83,12 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
   Future<void> _load({bool silent = false}) async {
     final tab = _tab;
     try {
-      final me = await DioClient.nodeDio.get('$_node/me');
+      final me = await DioClient.chatDio.get('$_node/me');
       final m = (me.data as Map).cast<String, dynamic>();
       _muted = m['muted'] == true;
       _handling = (m['handling'] as num?)?.toInt() ?? 0;
       _limit = (m['limit'] as num?)?.toInt() ?? 5;
-      final res = await DioClient.nodeDio.get('$_node/inbox', queryParameters: {'tab': tab, 'per_page': 100, if (_q.isNotEmpty) 'q': _q});
+      final res = await DioClient.chatDio.get('$_node/inbox', queryParameters: {'tab': tab, 'per_page': 100, if (_q.isNotEmpty) 'q': _q});
       final body = (res.data as Map).cast<String, dynamic>();
       final list = (body['data'] as List? ?? []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
       final c = (body['counts'] as Map?)?.cast<String, dynamic>() ?? {};
@@ -164,7 +164,7 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
 
   Future<void> _toggleMute() async {
     try {
-      final r = await DioClient.nodeDio.put('$_node/me', data: {'muted': !_muted});
+      final r = await DioClient.chatDio.put('$_node/me', data: {'muted': !_muted});
       if (mounted) setState(() => _muted = (r.data as Map)['muted'] == true);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
@@ -173,7 +173,7 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
 
   Future<void> _accept(Rec r) async {
     try {
-      await DioClient.nodeDio.post('$_node/${r['id']}/accept');
+      await DioClient.chatDio.post('$_node/${r['id']}/accept');
       await _open(r);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
@@ -342,7 +342,7 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
   Future<void> _fetch() async {
     try {
       // Also marks the conversation read on the server.
-      final res = await DioClient.nodeDio.get('$_node/${widget.id}', queryParameters: {'after': _lastId});
+      final res = await DioClient.chatDio.get('$_node/${widget.id}', queryParameters: {'after': _lastId});
       final body = (res.data as Map).cast<String, dynamic>();
       final fresh = (body['messages'] as List? ?? []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
       if (!mounted) return;
@@ -368,8 +368,8 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
     }
     try {
       if (path == null) {
-        // Text goes straight to backend-node.
-        await DioClient.nodeDio.post('$_node/${widget.id}/reply', data: {'text': text, if (_replyTo != null) 'reply_to_id': _replyTo!['id']});
+        // Text goes straight to chat-server.
+        await DioClient.chatDio.post('$_node/${widget.id}/reply', data: {'text': text, if (_replyTo != null) 'reply_to_id': _replyTo!['id']});
       } else {
         // Files are stored by Laravel; the server then pushes the new message back over the socket.
         final form = FormData.fromMap({
@@ -426,7 +426,7 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
 
   Future<void> _end() async {
     try {
-      await DioClient.nodeDio.post('$_node/${widget.id}/end');
+      await DioClient.chatDio.post('$_node/${widget.id}/end');
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) _snack(apiErrorMessage(e));

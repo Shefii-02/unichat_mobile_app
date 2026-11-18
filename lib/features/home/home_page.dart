@@ -1,3 +1,5 @@
+import 'package:unichat_mobile_app/core/network/api.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,10 @@ import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/sticky/sticky_overlay.dart';
+import 'package:unichat_mobile_app/features/home/section_panels.dart';
+import 'package:unichat_mobile_app/features/home/stats_charts.dart';
+import 'package:unichat_mobile_app/features/home/team_reports.dart';
+import 'package:unichat_mobile_app/features/home/wa_cloud_home.dart';
 import 'package:unichat_mobile_app/core/constants/api_constants.dart';
 
 /// Day-to-day CRM/HRMS dashboard: sales target, attendance (clock in/out,
@@ -31,11 +37,20 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final user = ref.watch(authProvider).value;
-    bool can(String p) =>
-        user == null ||
-        user.permissions.contains(p) ||
+    final hr = PermissionGuard.entitled('hr');
+    final leadsOn = PermissionGuard.entitled('leads');
+    // Home blocks follow the user's access sections (main + subs). Company Admin / owner /
+    // superadmin see every block; an account with no sections falls back to permissions only.
+    final sections = user?.accessSections ?? const <String>[];
+    final isAdmin = user == null ||
+        sections.contains('company_admin') ||
         user.role == 'superadmin' ||
         user.role == 'owner';
+    bool inSection(List<String> any) =>
+        isAdmin || sections.isEmpty || sections.any(any.contains);
+    bool can(String p) =>
+        isAdmin || user.permissions.contains(p);
+    final salesBlocks = leadsOn && inSection(const ['sales', 'marketing', 'administrators']);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -48,31 +63,95 @@ class HomePage extends ConsumerWidget {
               ref.invalidate(analyticsOverviewProvider);
               ref.invalidate(hrAttendanceMeProvider);
               ref.invalidate(dashboardMeProvider);
+              ref.invalidate(homeDashProvider);
               ref.invalidate(crmMyTasksProvider);
             },
             child: ListView(
               padding: const EdgeInsets.only(bottom: 32),
               children: [
                 const _HeroHeader(),
+                // 1 ── Clock in / today's attendance first.
+                if (hr)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: AttendanceStatusCard(),
+                  ),
+                // 2 ── Statistics: one dropdown (WA Cloud / CRM / Leads / Accounts /
+                // Attendance / Sales team), limited to what the plan + permissions allow.
+                if (can('dashboard.view')) const _StatsStrip(),
+                // 3 ── Individual: the user's own numbers, follow-ups and tasks.
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: AttendanceStatusCard(),
+                  padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: SectionHeader('My day'),
                 ),
                 const _PersonalStatsStrip(),
-                // Home follows the person's effective permissions (role + access sections), so
-                // Sales / Marketing / HR / Accounts accounts each see only their own blocks.
-                if (can('dashboard.view')) const _StatsStrip(),
-                if (can('leads.view') || can('wa_agent.leads.view')) ...const [
+                if (salesBlocks && (can('leads.view') || can('wa_agent.leads.view'))) ...const [
                   _PipelineSection(),
                   _FollowUpsSection(),
                 ],
                 const _TodayTasks(),
-                if (can('leads.view') || can('wa_agent.leads.view')) const _NextUpCard(),
+                if (salesBlocks && (can('leads.view') || can('wa_agent.leads.view'))) const _NextUpCard(),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Per-section "My / All" choice for Pipeline, Follow-ups and Today's tasks.
+class HomeScopeNotifier extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() => const {};
+  void set(String section, String scope) => state = {...state, section: scope};
+}
+
+final homeScopeProvider =
+    NotifierProvider<HomeScopeNotifier, Map<String, String>>(HomeScopeNotifier.new);
+
+/// `my` → the caller's own dashboard (shared with [dashboardMeProvider]); `all` →
+/// company-wide pipeline / follow-ups / tasks (GET /hr/dashboard/me?scope=all).
+final homeDashProvider = FutureProvider.family<Map<String, dynamic>, String>((ref, scope) {
+  if (scope != 'all') return ref.watch(dashboardMeProvider.future);
+  return Api.one('/hr/dashboard/me', query: {'scope': 'all'});
+});
+
+/// Small "My | All" pill switch. Hidden for accounts that can't see company-wide data.
+class _ScopeToggle extends ConsumerWidget {
+  const _ScopeToggle(this.section);
+  final String section;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!PermissionGuard.can('staff.view')) return const SizedBox.shrink();
+    final cur = ref.watch(homeScopeProvider)[section] ?? 'my';
+    Widget seg(String v, String label) {
+      final on = cur == v;
+      return GestureDetector(
+        onTap: () => ref.read(homeScopeProvider.notifier).set(section, v),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: on ? Theme.of(context).colorScheme.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(99),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: on ? Colors.white : context.mutedColor)),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: context.lineColor.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [seg('my', 'My'), seg('all', 'All')]),
     );
   }
 }
@@ -459,74 +538,159 @@ class _StatsStrip extends ConsumerWidget {
         );
       },
       data: (d) {
-        final chips =
-            <(String, String)>[
-              ('Messages', compact(d['messages_sent'] ?? d['total_messages'])),
-              ('Leads', compact(d['leads'] ?? d['total_leads'])),
-              ('Contacts', compact(d['contacts'] ?? d['total_contacts'])),
-              ('Campaigns', compact(d['campaigns'] ?? d['total_campaigns'])),
-            ].where((c) => c.$2 != '0').toList();
-        if (chips.isEmpty) {
-          return const _SectionPlaceholder(
-            title: 'Statistics',
-            message: 'No activity yet this month.',
-          );
-        }
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 6, 20, 0),
-                child: SectionHeader('Statistics'),
-              ),
-              SizedBox(
-                height: 66,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: chips.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) {
-                    final theme = Theme.of(context);
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: context.lineColor),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            chips[i].$2,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            chips[i].$1,
-                            style: TextStyle(
-                              color: context.mutedColor,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+        Map m(String k) => d[k] is Map ? d[k] as Map : const {};
+        final msg = m('messages'), ct = m('contacts'), ld = m('leads');
+        final conv = ld['conversion_rate'];
+        // One group per feature the company's plan includes: WA Cloud, CRM, Leads.
+        final groups = <(String, IconData, Color, List<(String, String)>)>[
+          if (PermissionGuard.entitled('wa_cloud'))
+            ('WA Cloud', Icons.cloud_rounded, const Color(0xFF0EA5E9), [
+              ('Sent', compact(msg['total_sent'])),
+              ('Today', compact(msg['sent_today'])),
+              ('This month', compact(msg['sent_this_month'])),
+              ('Received', compact(msg['inbound_total'])),
+            ]),
+          if (PermissionGuard.entitled('crm'))
+            ('CRM', Icons.contacts_rounded, const Color(0xFF7C3AED), [
+              ('Contacts', compact(ct['total'])),
+              ('Opted in', compact(ct['opted_in'])),
+              ('New today', compact(ct['new_today'])),
+              ('This month', compact(ct['new_month'])),
+            ]),
+          if (PermissionGuard.entitled('leads'))
+            ('Leads', Icons.track_changes_rounded, const Color(0xFF16A34A), [
+              ('Total', compact(ld['total'])),
+              ('New', compact(ld['new'])),
+              ('In progress', compact(ld['in_progress'])),
+              ('Enrolled', compact(ld['enrolled'])),
+              if (conv != null) ('Conversion', '${compact(conv)}%'),
+            ]),
+          if (PermissionGuard.entitled('finance') &&
+              (PermissionGuard.can('accounts.read') || PermissionGuard.can('accounts.manage')))
+            ('Accounts', Icons.account_balance_rounded, const Color(0xFFEAB308), const []),
+          if (PermissionGuard.entitled('hr') &&
+              (PermissionGuard.can('hr.manage') || PermissionGuard.can('hr.attendance.view_all')))
+            ('Attendance', Icons.groups_rounded, const Color(0xFFEC4899), const []),
+          if (PermissionGuard.entitled('leads') && PermissionGuard.can('staff.view'))
+            ('Sales team', Icons.trending_up_rounded, const Color(0xFF22C55E), const []),
+        ];
+        if (groups.isEmpty) return const SizedBox(height: 0);
+        return _StatsGroups(groups: groups, overview: d);
+      },
+    );
+  }
+}
+
+typedef _StatGroup = (String, IconData, Color, List<(String, String)>);
+
+/// Statistics body: a dropdown picks which group (WA Cloud / CRM / Leads) is shown.
+class _StatsGroups extends StatefulWidget {
+  const _StatsGroups({required this.groups, required this.overview});
+  final List<_StatGroup> groups;
+  final Map overview;
+  @override
+  State<_StatsGroups> createState() => _StatsGroupsState();
+}
+
+class _StatsGroupsState extends State<_StatsGroups> {
+  int _sel = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final groups = widget.groups;
+    final g = groups[_sel.clamp(0, groups.length - 1)];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+            child: Row(children: [
+              const Expanded(child: SectionHeader('Statistics')),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: g.$3.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: g.$3.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: groups.indexOf(g),
+                    isDense: true,
+                    icon: Icon(Icons.keyboard_arrow_down_rounded, color: g.$3),
+                    style: TextStyle(color: g.$3, fontWeight: FontWeight.w800, fontSize: 13),
+                    items: [
+                      for (var i = 0; i < groups.length; i++)
+                        DropdownMenuItem(
+                          value: i,
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(groups[i].$2, size: 16, color: groups[i].$3),
+                            const SizedBox(width: 6),
+                            Text(groups[i].$1, style: TextStyle(color: groups[i].$3)),
+                          ]),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _sel = v ?? 0),
+                  ),
                 ),
               ),
-            ],
+            ]),
           ),
-        );
-      },
+          const SizedBox(height: 6),
+          if (g.$1 == 'Accounts')
+            const AccountsStatsBody()
+          else if (g.$1 == 'Attendance')
+            const AttendanceReport()
+          else if (g.$1 == 'Sales team')
+            const SalesTeamReport()
+
+          else if (g.$1 == 'WA Cloud')
+            const WaCloudUsageCards()
+          else
+            SizedBox(
+              height: 66,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: g.$4.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (_, i) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: g.$3.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: g.$3.withOpacity(0.25)),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(g.$4[i].$2,
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                      Text(g.$4[i].$1,
+                          style: TextStyle(color: context.mutedColor, fontSize: 11.5)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          if (g.$1 == 'Accounts' || g.$1 == 'Attendance' || g.$1 == 'Sales team')
+            const SizedBox.shrink()
+          else if (g.$1 == 'WA Cloud')
+            const Column(children: [
+              WaCloudHome(chartOnly: true),
+              CampaignResponsesChart(),
+            ])
+          else if (g.$1 == 'Leads')
+            const WaCloudHome(chartOnly: true, endpoint: 'leads-home', metrics: leadsMetrics)
+          else
+            StatsGroupChart(group: g.$1, color: g.$3, overview: widget.overview),
+          const SizedBox(height: 14),
+        ],
+      ),
     );
   }
 }
@@ -538,7 +702,7 @@ class _PipelineSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(dashboardMeProvider);
+    final async = ref.watch(homeDashProvider(ref.watch(homeScopeProvider)['pipeline'] ?? 'my'));
     return async.when(
       loading:
           () => const _SectionPlaceholder(
@@ -573,10 +737,13 @@ class _PipelineSection extends ConsumerWidget {
             children: [
               SectionHeader(
                 'Pipeline',
-                action: TextButton(
-                  onPressed: () => context.go('/leads'),
-                  child: const Text('View all'),
-                ),
+                action: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const _ScopeToggle('pipeline'),
+                  TextButton(
+                    onPressed: () => context.go('/leads'),
+                    child: const Text('View all'),
+                  ),
+                ]),
               ),
               SizedBox(
                 height: 62,
@@ -637,7 +804,7 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(dashboardMeProvider);
+    final async = ref.watch(homeDashProvider(ref.watch(homeScopeProvider)['followups'] ?? 'my'));
     return async.when(
       loading:
           () => const _SectionPlaceholder(
@@ -691,10 +858,13 @@ class _FollowUpsSectionState extends ConsumerState<_FollowUpsSection> {
             children: [
               SectionHeader(
                 'Follow-ups',
-                action: TextButton(
-                  onPressed: () => context.go('/leads'),
-                  child: const Text('View all'),
-                ),
+                action: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const _ScopeToggle('followups'),
+                  TextButton(
+                    onPressed: () => context.go('/leads'),
+                    child: const Text('View all'),
+                  ),
+                ]),
               ),
               Row(
                 children: [
@@ -899,7 +1069,7 @@ class _TodayTasks extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(dashboardMeProvider);
+    final async = ref.watch(homeDashProvider(ref.watch(homeScopeProvider)['tasks'] ?? 'my'));
     return async.when(
       loading:
           () => const _SectionPlaceholder(
@@ -914,14 +1084,35 @@ class _TodayTasks extends ConsumerWidget {
           ),
       data: (d) {
         final tasks = (d['tasks'] is Map) ? (d['tasks'] as Map) : const {};
-        final items =
-            (tasks['items'] is List)
+        final sortDoneFirst = ref.watch(homeScopeProvider)['tasks_sort'] == 'done';
+        int rank(Map t) {
+          final st = str(t['status'], 'open');
+          final open = st == 'open' ? 0 : (st == 'done' ? 1 : 2); // open → done → cancelled
+          return sortDoneFirst && st == 'done' ? -1 : open;
+        }
+        int pr(Map t) => switch (str(t['priority'], '')) { 'high' => 0, 'medium' => 1, _ => 2 };
+        final items = ((tasks['items'] is List)
                 ? (tasks['items'] as List).whereType<Map>().toList()
-                : const <Map>[];
+                : <Map>[])
+          ..sort((a, b) {
+            final c = rank(a).compareTo(rank(b));
+            if (c != 0) return c;
+            final p = pr(a).compareTo(pr(b));
+            if (p != 0) return p;
+            return '${a['due_at'] ?? '9'}'.compareTo('${b['due_at'] ?? '9'}');
+          });
         if (items.isEmpty) {
-          return const _SectionPlaceholder(
-            title: "Today's tasks",
-            message: 'Nothing assigned to you today.',
+          final all = (ref.watch(homeScopeProvider)['tasks'] ?? 'my') == 'all';
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const SectionHeader("Today's tasks", action: _ScopeToggle('tasks')),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(all ? 'No tasks today.' : 'Nothing assigned to you today.',
+                    style: TextStyle(color: context.mutedColor, fontSize: 12.5)),
+              ),
+            ]),
           );
         }
         final done = tasks['done'] ?? 0;
@@ -934,10 +1125,37 @@ class _TodayTasks extends ConsumerWidget {
             children: [
               SectionHeader(
                 "Today's tasks",
-                action: Text(
-                  '$done of $total done',
-                  style: TextStyle(color: context.mutedColor, fontSize: 12),
-                ),
+                action: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const _ScopeToggle('tasks'),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$done of $total done',
+                    style: TextStyle(color: context.mutedColor, fontSize: 12),
+                  ),
+                ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(children: [
+                  Text('Order by status', style: TextStyle(color: context.mutedColor, fontSize: 11.5)),
+                  const SizedBox(width: 8),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: sortDoneFirst ? 'done' : 'open',
+                      isDense: true,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface),
+                      items: const [
+                        DropdownMenuItem(value: 'open', child: Text('Open first')),
+                        DropdownMenuItem(value: 'done', child: Text('Done first')),
+                      ],
+                      onChanged: (v) =>
+                          ref.read(homeScopeProvider.notifier).set('tasks_sort', v ?? 'open'),
+                    ),
+                  ),
+                ]),
               ),
               ...items.take(8).map((t) {
                 final isDone = str(t['status'], 'open') == 'done';
@@ -958,6 +1176,7 @@ class _TodayTasks extends ConsumerWidget {
                         );
                         if (ok) {
                           ref.invalidate(dashboardMeProvider);
+                          ref.invalidate(homeDashProvider);
                           ref.invalidate(crmMyTasksProvider);
                         }
                       },
@@ -993,16 +1212,26 @@ class _TodayTasks extends ConsumerWidget {
                                 ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Text(
-                                str(t['title'], 'Task'),
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  decoration:
-                                      isDone
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                  color: isDone ? context.mutedColor : null,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    str(t['title'], 'Task'),
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      decoration:
+                                          isDone
+                                              ? TextDecoration.lineThrough
+                                              : null,
+                                      color: isDone ? context.mutedColor : null,
+                                    ),
+                                  ),
+                                  if (t['assignee'] != null)
+                                    Text('${t['assignee']}',
+                                        style: TextStyle(
+                                            color: context.mutedColor,
+                                            fontSize: 11)),
+                                ],
                               ),
                             ),
                             if (!isDone &&

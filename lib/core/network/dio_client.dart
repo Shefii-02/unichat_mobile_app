@@ -43,8 +43,51 @@ class DioClient {
     return dio;
   }
 
+  /// Shared in-flight refresh so concurrent 401s trigger one `/auth/refresh`, not several
+  /// (the backend blacklists the old token on refresh, so a second call would fail).
+  static Future<bool>? _refreshing;
+
+  /// Slides an expired-but-still-refreshable access token forward (access TTL is 24h, refresh
+  /// window 14 days) so the user isn't thrown back to the device login/scan screen every day.
+  static Future<bool> refreshSession() {
+    return _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+  }
+
+  static Future<bool> _doRefresh() async {
+    try {
+      final token = await SecureStorageService.getToken();
+      if (token == null) return false;
+      final res = await Dio(BaseOptions(
+        baseUrl: ApiConstants.laravelBase,
+        connectTimeout: ApiConstants.connectTimeout,
+        receiveTimeout: ApiConstants.receiveTimeout,
+        headers: {
+          'Accept': 'application/json',
+          'X-Client': 'mobile',
+          'Authorization': 'Bearer $token',
+          if (LocalStorage.getString(LocalStorage.kDeviceUid) != null)
+            'X-Device-Uid': LocalStorage.getString(LocalStorage.kDeviceUid)!,
+        },
+      )).post('/auth/refresh');
+      final fresh = (res.data as Map)['access_token'] as String?;
+      if (fresh == null) return false;
+      await SecureStorageService.saveToken(fresh);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static final laravelDio = _buildDio(ApiConstants.laravelBase);
   static final nodeDio    = _buildDio(ApiConstants.nodeBase);
+  static final chatDio    = _buildDio(ApiConstants.chatBase);
+
+  /// The client a request was built for, so a retry goes back to the same server.
+  static Dio _dioFor(String baseUrl) {
+    if (baseUrl == laravelDio.options.baseUrl) return laravelDio;
+    if (baseUrl == chatDio.options.baseUrl) return chatDio;
+    return nodeDio;
+  }
 }
 
 /// `true` when the *token itself* was rejected — a normal 401/419, or the
@@ -103,6 +146,25 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (isAuthFailure(err.response)) {
+      // Expired access token but still inside the refresh window: refresh and replay the
+      // request once instead of signing the user out.
+      final opts = err.requestOptions;
+      final isAuthCall = opts.path.contains('/auth/login') || opts.path.contains('/auth/refresh');
+      if (!isAuthCall && opts.extra['retried'] != true && await DioClient.refreshSession()) {
+        try {
+          final token = await SecureStorageService.getToken();
+          opts.extra['retried'] = true;
+          opts.headers['Authorization'] = 'Bearer $token';
+          final retryDio = DioClient._dioFor(opts.baseUrl);
+          handler.resolve(await retryDio.fetch(opts));
+          return;
+        } on DioException catch (e) {
+          if (!isAuthFailure(e.response)) {
+            handler.next(e);
+            return;
+          }
+        } catch (_) {}
+      }
       await SecureStorageService.clearAll();
       DioClient.onAuthFailure?.call();
       handler.next(err);
@@ -122,9 +184,7 @@ class _AuthInterceptor extends Interceptor {
         try {
           final retryOptions = err.requestOptions
             ..headers['Authorization'] = 'Bearer $token';
-          final retryDio = retryOptions.baseUrl == DioClient.laravelDio.options.baseUrl
-              ? DioClient.laravelDio
-              : DioClient.nodeDio;
+          final retryDio = DioClient._dioFor(retryOptions.baseUrl);
           final response = await retryDio.fetch(retryOptions);
           handler.resolve(response);
           return;

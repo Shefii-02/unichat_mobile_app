@@ -19,6 +19,12 @@ import 'package:unichat_mobile_app/features/home/home_page.dart';
 import 'package:unichat_mobile_app/features/quick_actions/quick_actions_page.dart';
 import 'package:unichat_mobile_app/features/hub/module_hub_page.dart';
 import 'package:unichat_mobile_app/features/chats/presentation/pages/chats_page.dart';
+import 'package:unichat_mobile_app/features/team_chat/group_info_page.dart';
+import 'package:unichat_mobile_app/features/team_chat/message_info_page.dart';
+import 'package:unichat_mobile_app/features/team_chat/team_chat_admin.dart';
+import 'package:unichat_mobile_app/features/team_chat/team_chat_pickers.dart';
+import 'package:unichat_mobile_app/features/team_chat/team_chat_room_page.dart';
+import 'package:unichat_mobile_app/features/team_chat/team_chats_page.dart';
 import 'package:unichat_mobile_app/features/leads/presentation/pages/leads_page.dart';
 import 'package:unichat_mobile_app/features/leads/presentation/pages/lead_detail_page.dart';
 import 'package:unichat_mobile_app/features/contacts/presentation/pages/contacts_page.dart';
@@ -501,7 +507,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/wa-chat/chats', builder: (_, __) => const ChatsPage()),
+              GoRoute(path: '/team-chat', builder: (_, __) => const TeamChatsPage()),
             ],
           ),
           StatefulShellBranch(
@@ -590,6 +596,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
 
+      // WhatsApp customer chats (module tile) — no longer a bottom-nav tab, so a normal pushed screen.
+      GoRoute(path: '/wa-chat/chats', builder: (_, __) => const ChatsPage()),
+      // Team chat (bottom "Chats" tab → list; these open full-screen over the shell).
+      GoRoute(path: '/team-chat/new', builder: (_, __) => const NewChatPage()),
+      GoRoute(path: '/team-chat/new-group', builder: (_, __) => const NewGroupPage()),
+      GoRoute(path: '/team-chat/mentions', builder: (_, __) => const MentionsPage()),
+      GoRoute(path: '/team-chat/starred', builder: (_, __) => const StarredMessagesPage()),
+      GoRoute(path: '/team-chat/admin', builder: (_, __) => const TeamChatModerationPage()),
+      GoRoute(
+        path: '/team-chat/:id',
+        // ?m=<messageId> opens the chat scrolled to (and highlighting) that message — used by search + mentions.
+        builder: (_, s) => TeamChatRoomPage(
+          chatId: int.parse(s.pathParameters['id']!),
+          jumpToMessageId: int.tryParse(s.uri.queryParameters['m'] ?? ''),
+        ),
+      ),
+      GoRoute(
+        path: '/team-chat/:id/info',
+        builder: (_, s) => GroupInfoPage(chatId: int.parse(s.pathParameters['id']!)),
+      ),
       GoRoute(
         path: '/notifications',
         builder: (_, __) => const NotificationsPage(),

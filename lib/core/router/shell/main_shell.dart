@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/nav/hidden_modules_provider.dart';
+import 'package:unichat_mobile_app/features/team_chat/team_chat_data.dart';
+import 'package:unichat_mobile_app/services/push_service.dart';
 
 /// The one persistent bottom-nav frame. Wraps a [StatefulNavigationShell] (see
 /// `StatefulShellRoute.indexedStack` in app_router.dart) — each tab keeps its own Navigator
@@ -29,6 +31,9 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(mobileHiddenModulesProvider); // loads the superadmin's hidden-tile list
+    ref.watch(teamChatRealtimeProvider); // keeps the staff socket up + refreshes chats on events
+    final chatUnread = ref.watch(teamUnreadProvider);
+    PushService.instance.onOpenTeamChat = (id) => context.push('/team-chat/$id');
     final idx = navigationShell.currentIndex;
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.of(context).padding.bottom;
@@ -60,7 +65,7 @@ class MainShell extends ConsumerWidget {
                               // Re-tapping the current tab resets it to its initial location; a different tab
                               // just switches branch, keeping that branch's own navigation stack where it was.
                               onTap: () => navigationShell.goBranch(t.branch, initialLocation: t.branch == idx),
-                              child: _item(theme, t, t.branch == idx),
+                              child: _item(theme, t, t.branch == idx, badge: t.branch == 2 ? chatUnread : 0),
                             ),
                     ),
                 ]),
@@ -78,10 +83,13 @@ class MainShell extends ConsumerWidget {
     );
   }
 
-  Widget _item(ThemeData theme, _Tab t, bool selected) {
+  Widget _item(ThemeData theme, _Tab t, bool selected, {int badge = 0}) {
     final color = selected ? AppColors.primary : theme.colorScheme.onSurface.withValues(alpha: 0.55);
+    final icon = Icon(selected ? t.activeIcon : t.icon, size: 24, color: color);
     return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(selected ? t.activeIcon : t.icon, size: 24, color: color),
+      badge > 0
+          ? Badge(label: Text(badge > 99 ? '99+' : '$badge'), child: icon)
+          : icon,
       const SizedBox(height: 2),
       Text(t.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, fontWeight: selected ? FontWeight.w700 : FontWeight.w500, color: color)),
     ]);

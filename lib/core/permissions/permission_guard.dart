@@ -14,7 +14,18 @@ class PermissionGuard {
   static void clear() {
     _permissions = [];
     _role = '';
+    _entitled = null;
   }
+
+  /// Feature modules the company's plan/add-ons include; `null` = no restriction.
+  static Set<String>? _entitled;
+  static void setEntitlements(List<String>? modules) =>
+      _entitled = modules?.toSet();
+
+  /// Whether the company's plan includes [module] (backend Modules key, e.g. `hr`, `crm`).
+  /// Superadmins and companies with no plan restriction see everything.
+  static bool entitled(String? module) =>
+      module == null || _entitled == null || _role == 'superadmin' || _entitled!.contains(module);
 
   static bool can(String permission) =>
       isOwner || _permissions.contains(permission);

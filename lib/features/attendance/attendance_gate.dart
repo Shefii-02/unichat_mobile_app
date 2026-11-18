@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/network/api.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 
 String _todayKey() {
   final now = DateTime.now();
@@ -43,14 +44,25 @@ class AttendanceGateNotifier extends Notifier<AttendanceGateState> {
     if (_inFlight) return;
     _inFlight = true;
     try {
+      if (!PermissionGuard.entitled('hr')) {
+        state = AttendanceGateState(loaded: true, fetchedForDate: _todayKey());
+        return;
+      }
       final d = await Api.one('/hr/attendance/me');
+      // Staff with attendance switched off (HR staff profile inactive) skip the gate entirely.
+      final profile = d['profile'] is Map ? (d['profile'] as Map) : null;
+      if (profile != null && profile['is_active'] == false) {
+        state = AttendanceGateState(loaded: true, fetchedForDate: _todayKey());
+        return;
+      }
       final today = d['today'] is Map ? (d['today'] as Map) : null;
       final needsClockIn = today == null || today['clock_in_at'] == null;
       final onBreak = d['open_break'] != null;
       state = AttendanceGateState(
           loaded: true, needsClockIn: needsClockIn, onBreak: onBreak, fetchedForDate: _todayKey());
     } catch (_) {
-      // A company that doesn't use the HR module, or a transient network
+      // HR not in the company's plan: the server answers 403 `module_not_available` — no
+      // attendance, so no clock-in gate. Same fail-open path as any other error. A company that doesn't use the HR module, or a transient network
       // error, must never lock users out of the rest of the app — fail open.
       state = AttendanceGateState(loaded: true, fetchedForDate: _todayKey());
     } finally {

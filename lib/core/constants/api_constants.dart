@@ -5,6 +5,10 @@ class ApiConstants {
   static const nodeBase    = 'https://unichatwa.univexa.in';
   static const socketUrl   = 'wss://unichatwa.univexa.in';
 
+  /// chat-server: team chat + website live chat REST, and the `/staff` realtime socket.
+  static const chatBase      = 'https://chatserver.teamzo.io';
+  static const chatSocketUrl = 'wss://chatserver.teamzo.io';
+
   /// Origin the Laravel API is served from, without the `/api/v1` suffix — needed to
   /// resolve `Storage::disk('public')` paths (e.g. `avatars/6/x.jpg`) into loadable URLs,
   /// the same way the web frontend does (`SettingsPage.tsx`: `` `/storage/${u.avatar}` ``).

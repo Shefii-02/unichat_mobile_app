@@ -28,6 +28,7 @@ class AuthRepository {
     final user = UserModel.fromJson(body['user'] as Map<String, dynamic>);
     await LocalStorage.setJson(LocalStorage.kUser, user.toJson());
     PermissionGuard.setPermissions(user.permissions, user.role);
+    PermissionGuard.setEntitlements(user.entitledModules);
     return user;
   }
 
@@ -36,6 +37,7 @@ class AuthRepository {
     if (json == null) return null;
     final user = UserModel.fromJson(json);
     PermissionGuard.setPermissions(user.permissions, user.role);
+    PermissionGuard.setEntitlements(user.entitledModules);
     return user;
   }
 
@@ -65,6 +67,7 @@ class AuthRepository {
     final user = UserModel.fromJson(userMap);
     await LocalStorage.setJson(LocalStorage.kUser, user.toJson());
     PermissionGuard.setPermissions(user.permissions, user.role);
+    PermissionGuard.setEntitlements(user.entitledModules);
     return user;
   }
 

@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Network — dio, socket_io_client, connectivity_plus, cached_network_image -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -21,12 +22,12 @@
     <!-- Biometric unlock (local_auth) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
 
-    <!-- Media attachments (image_picker / photo_view / share_plus) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32"/>
+    <!-- Media attachments use the system Photo Picker (image_picker / file_picker),
+         which needs no storage permission. Google Play forbids READ_MEDIA_IMAGES /
+         READ_MEDIA_VIDEO here, so strip them if any plugin tries to merge them in. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
 
     <!-- The camera is optional — the app still runs on devices without one. -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>

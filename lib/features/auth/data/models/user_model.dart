@@ -11,6 +11,14 @@ class UserModel {
   final String? waContactToken; // wa_chat_token for node backend auth
   final List<String> permissions;
 
+  /// Access sections assigned to the user, main first (company_admin, administrators, sales,
+  /// marketing, hr, accounts). Their permissions are already merged into [permissions].
+  final List<String> accessSections;
+
+  /// Feature modules the company's plan + add-ons include (see backend Modules::REGISTRY).
+  /// `null` = unknown / no plan restriction → everything shown.
+  final List<String>? entitledModules;
+
   const UserModel({
     required this.id,
     required this.name,
@@ -23,6 +31,8 @@ class UserModel {
     this.companySlug,
     this.waContactToken,
     required this.permissions,
+    this.accessSections = const [],
+    this.entitledModules,
   });
 
   // Parses the raw user object (already unwrapped — just the "user" map)
@@ -37,6 +47,13 @@ class UserModel {
         ? perms.map((e) => e.toString()).toList()
         : <String>[];
 
+    final sections = json['access_sections'];
+    final ent = company?['entitlements'] ?? json['entitlements'];
+    List<String>? entitled;
+    if (ent is Map && ent['all'] != true && ent['modules'] is List) {
+      entitled = (ent['modules'] as List).map((e) => e.toString()).toList();
+    }
+
     return UserModel(
       id:              json['id'] as int,
       name:            json['name'] as String? ?? '',
@@ -49,6 +66,8 @@ class UserModel {
       companySlug:     company?['slug'] as String?,
       waContactToken:  company?['wa_chat_token'] as String?,
       permissions:     permissions,
+      accessSections:  sections is List ? sections.map((e) => e.toString()).toList() : const [],
+      entitledModules: entitled,
     );
   }
 
@@ -65,5 +84,7 @@ class UserModel {
     'company_slug':     companySlug,
     'wa_contact_token': waContactToken,
     'permissions':      permissions,
+    'access_sections':  accessSections,
+    if (entitledModules != null) 'entitlements': {'all': false, 'modules': entitledModules},
   };
 }

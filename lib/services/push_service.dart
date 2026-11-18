@@ -21,6 +21,30 @@ class PushService {
   String? _token;
   bool _listening = false;
 
+  // Tap on a team-chat push (message or @mention) → open that chat. The shell registers the handler once
+  // it has a router context; a tap that arrives earlier (cold start) is held until then.
+  void Function(int chatId)? _openChat;
+  int? _pendingChat;
+  set onOpenTeamChat(void Function(int chatId)? h) {
+    _openChat = h;
+    if (h != null && _pendingChat != null) {
+      final id = _pendingChat!;
+      _pendingChat = null;
+      h(id);
+    }
+  }
+
+  void _handleTap(RemoteMessage m) {
+    if (m.data['action'] != 'open_team_chat') return;
+    final id = int.tryParse('${m.data['chat_id']}');
+    if (id == null) return;
+    if (_openChat != null) {
+      _openChat!(id);
+    } else {
+      _pendingChat = id;
+    }
+  }
+
   Future<void> register() async {
     try {
       final fm = FirebaseMessaging.instance;
@@ -39,6 +63,9 @@ class PushService {
       if (!_listening) {
         _listening = true;
         fm.onTokenRefresh.listen(_send);
+        FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
+        final initial = await fm.getInitialMessage();
+        if (initial != null) _handleTap(initial);
       }
     } catch (e) {
       debugPrint('Push register failed: $e');

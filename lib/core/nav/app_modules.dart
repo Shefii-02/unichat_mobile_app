@@ -55,8 +55,34 @@ class AppModule {
   /// `mobileHiddenModulesProvider`; routes keep working, only the tiles disappear.
   static Set<String> serverHidden = {};
 
+  /// Backend feature-module key (Modules::REGISTRY) this tile belongs to; `null` = core.
+  String? get entitlementModule {
+    switch (id) {
+      case 'media_library': return 'media_library';
+      case 'integrations': return 'integrations';
+      case 'widget': return 'web_widgets';
+      case 'flow_builder': case 'otp_service': return 'wa_cloud';
+      case 'accounts_books': return 'finance';
+    }
+    switch (group) {
+      case ModuleGroup.waChat: return 'wa_chat';
+      case ModuleGroup.waCloud: return 'wa_cloud';
+      case ModuleGroup.waAgents: return 'ai_agent';
+      case ModuleGroup.metaInstagram:
+        if (id.startsWith('instagram')) return 'social_dm';
+        return id == 'listings' ? 'wa_cloud' : 'meta_ads';
+      case ModuleGroup.sales:
+        return (id.startsWith('lead') || id.startsWith('assignment') || id == 'leads')
+            ? 'leads' : 'crm';
+      case ModuleGroup.hr: return 'hr';
+      case ModuleGroup.accounts: return 'finance';
+      default: return null;
+    }
+  }
+
   bool get visible {
     if (serverHidden.contains(id)) return false;
+    if (!PermissionGuard.entitled(entitlementModule)) return false;
     if (permission == null) return true;
     return PermissionGuard.can(permission!) ||
         PermissionGuard.canView(permission!.split('.').first);
