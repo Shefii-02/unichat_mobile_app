@@ -125,19 +125,23 @@ class _AssignmentCard extends StatelessWidget {
       leadingIcon: Icons.assignment_ind_rounded,
       trailing: active
           ? RowMenu(items: [
-              ('Accept', Icons.check_rounded, () async {
-                final ok = await runAction(context, () => Api.post('/lead-assignments/${row['id']}/accept'), success: 'Accepted');
-                if (ok) onChanged();
-              }),
-              ('Decline', Icons.close_rounded, () async {
-                final ok = await runAction(context, () => Api.post('/lead-assignments/${row['id']}/decline'), success: 'Declined');
-                if (ok) onChanged();
-              }),
-              ('Complete', Icons.check_circle_outline_rounded, () async {
-                final ok = await runAction(context, () => Api.post('/lead-assignments/${row['id']}/complete'), success: 'Completed');
-                if (ok) onChanged();
-              }),
-              ('Transfer', Icons.swap_horiz_rounded, () => _transfer(context)),
+              if (row['offered_to_me'] == true) ...[
+                ('Accept', Icons.check_rounded, () async {
+                  final ok = await runAction(context, () => Api.post('/lead-assignments/${row['id']}/accept'), success: 'Accepted');
+                  if (ok) onChanged();
+                }),
+                ('Decline', Icons.close_rounded, () async {
+                  final ok = await runAction(context, () => Api.post('/lead-assignments/${row['id']}/decline'), success: 'Declined');
+                  if (ok) onChanged();
+                }),
+              ],
+              if (row['can_act'] == true) ...[
+                ('Complete', Icons.check_circle_outline_rounded, () async {
+                  final ok = await runAction(context, () => Api.post('/lead-assignments/${row['id']}/complete'), success: 'Completed');
+                  if (ok) onChanged();
+                }),
+                ('Transfer', Icons.swap_horiz_rounded, () => _transfer(context)),
+              ],
             ])
           : StatusPill(status),
     );
