@@ -947,7 +947,8 @@ class _ContactInfoPageState extends ConsumerState<ContactInfoPage> with SingleTi
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: context.mutedColor, letterSpacing: 0.4)),
               FilledButton(
                 onPressed: _creatingLead ? null : _createLead,
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
+                // the app theme makes FilledButtons full-width; in this Row that is an infinite width, so give it a content-sized minimum
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 36), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6)),
                 child: _creatingLead
                     ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text('+ Lead', style: TextStyle(fontSize: 12)),

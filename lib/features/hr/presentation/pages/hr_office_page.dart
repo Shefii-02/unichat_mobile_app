@@ -24,6 +24,8 @@ class HrOfficePage extends ConsumerWidget {
           KvRow('Geofence mandatory', s['geofence_mandatory'] == true ? 'Yes' : 'No'),
           KvRow('Late grace', '${s['grace_minutes'] ?? 0} min'),
           KvRow('Late clock-in reason', _lateNoteLabel(_lateNoteMode(s))),
+          KvRow('Selfie photos stored in', _storageLabel(_selfieStorage(s))),
+          KvRow('Attendance Google Sheet', s['attendance_sheet_enabled'] == true ? 'On' : 'Off'),
           KvRow('Timezone', str(s['timezone'])),
           KvRow('Reopen requests', s['reopen_auto_approve'] == true ? 'Auto-approved' : 'Needs manager approval'),
           const SizedBox(height: 16),
@@ -55,6 +57,19 @@ class HrOfficePage extends ConsumerWidget {
           labelOf: _lateNoteLabel,
           onSaved: (v) => data['late_note_mode'] = v ?? 'required',
         ),
+        FSelect<String>(
+          label: 'Selfie photos are stored in',
+          options: const ['media_library', 'google_drive'],
+          initial: _selfieStorage(s),
+          labelOf: _storageLabel,
+          onSaved: (v) => data['selfie_storage'] = v ?? 'media_library',
+        ),
+        FBoolField(
+          label: 'Also save attendance to a Google Sheet',
+          hint: 'Every clock in/out and break is added as a row as it happens. Needs Google Sheets in the plan and a connected Google account. Google Drive for selfies needs Drive in the plan and a connected account too.',
+          initial: s['attendance_sheet_enabled'] == true,
+          onSaved: (v) => data['attendance_sheet_enabled'] = v,
+        ),
         FText(label: 'Timezone', initial: s['timezone'] as String?, onSaved: (v) => v.isEmpty ? null : data['timezone'] = v),
         FBoolField(
           label: 'Auto-approve reopen requests',
@@ -67,6 +82,10 @@ class HrOfficePage extends ConsumerWidget {
     );
     if (ok) ref.invalidate(hrSettingsProvider);
   }
+
+  static String _selfieStorage(Rec s) => s['selfie_storage'] == 'google_drive' ? 'google_drive' : 'media_library';
+
+  static String _storageLabel(String m) => m == 'google_drive' ? 'Google Drive' : 'Media Library';
 
   static String _lateNoteMode(Rec s) {
     final m = s['late_note_mode'];

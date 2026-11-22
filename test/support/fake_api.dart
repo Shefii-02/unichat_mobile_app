@@ -6,9 +6,12 @@ import 'package:unichat_mobile_app/core/network/dio_client.dart';
 
 /// Return this from a [FakeApi] handler to answer with a status other than 200 (e.g. 409 for "device limit").
 class FakeReply {
-  const FakeReply(this.status, this.body);
+  const FakeReply(this.status, this.body, {this.delay});
   final int status;
   final dynamic body;
+
+  /// Answer only after this long — for testing a slow connection.
+  final Duration? delay;
 }
 
 /// A stand-in for the Laravel server: every request the app makes goes to [handler], which returns the
@@ -26,6 +29,7 @@ class FakeApi implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     calls.add(options);
     final reply = handler(options);
+    if (reply is FakeReply && reply.delay != null) await Future<void>.delayed(reply.delay!);
     final status = reply is FakeReply ? reply.status : 200;
     final body = reply is FakeReply ? reply.body : reply;
     return ResponseBody.fromString(jsonEncode(body ?? {}), status, headers: {

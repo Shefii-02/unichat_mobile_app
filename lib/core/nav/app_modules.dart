@@ -63,6 +63,8 @@ class AppModule {
       case 'widget': return 'web_widgets';
       case 'flow_builder': case 'otp_service': return 'wa_cloud';
       case 'accounts_books': return 'finance';
+      case 'tasks_dashboard': return 'tasks';
+      case 'messenger_dashboard': return 'social_dm';
     }
     switch (group) {
       case ModuleGroup.waChat: return 'wa_chat';
@@ -341,6 +343,16 @@ class AppModules {
     // ── WA Agents: Knowledge Base, Pipelines, AI Agents, Playbooks, Lead Intelligence,
     // AI Config, Logs, Settings ────────────────────────────────────
     AppModule(
+      id: 'ai_dashboard',
+      title: 'Dashboard',
+      subtitle: 'Agents & conversations',
+      icon: Icons.dashboard_rounded,
+      route: '/ai-agent/dashboard',
+      group: ModuleGroup.waAgents,
+      permission: 'wa_agent.ai.view',
+      color: Color(0xFF6366F1),
+    ),
+    AppModule(
       id: 'knowledge_base',
       title: 'Knowledge Base',
       subtitle: 'AI training',
@@ -450,6 +462,16 @@ class AppModules {
     // Creative Studio, Media Library, Ads Insight, Auto DM Rules, SM Inbox, Comments,
     // Insight, Catalogs ────────────────────────────────────────────
     AppModule(
+      id: 'meta_dashboard',
+      title: 'Ads Dashboard',
+      subtitle: 'Spend, leads & campaigns',
+      icon: Icons.dashboard_rounded,
+      route: '/meta-ads/dashboard',
+      group: ModuleGroup.metaInstagram,
+      permission: 'meta_ads.view',
+      color: Color(0xFF1877F2),
+    ),
+    AppModule(
       id: 'meta_accounts',
       title: 'Accounts',
       subtitle: 'Connected ad accounts',
@@ -518,6 +540,26 @@ class AppModules {
       group: ModuleGroup.metaInstagram,
       permission: 'meta_ads.view',
       color: Color(0xFF1877F2),
+    ),
+    AppModule(
+      id: 'instagram_dashboard',
+      title: 'Instagram Dashboard',
+      subtitle: 'DMs, flows & leads',
+      icon: Icons.dashboard_rounded,
+      route: '/instagram/dashboard',
+      group: ModuleGroup.metaInstagram,
+      permission: 'instagram.view',
+      color: Color(0xFFDB4C6A),
+    ),
+    AppModule(
+      id: 'messenger_dashboard',
+      title: 'Messenger Dashboard',
+      subtitle: 'Pages, DMs & leads',
+      icon: Icons.dashboard_rounded,
+      route: '/messenger/dashboard',
+      group: ModuleGroup.metaInstagram,
+      permission: 'instagram.view',
+      color: Color(0xFF0EA5E9),
     ),
     AppModule(
       id: 'instagram_flows',
@@ -612,6 +654,16 @@ class AppModules {
       group: ModuleGroup.sales,
       permission: 'contacts.view',
       color: Color(0xFF0EA5A5),
+    ),
+    AppModule(
+      id: 'tasks_dashboard',
+      title: 'Tasks Dashboard',
+      subtitle: 'Open, overdue & done',
+      icon: Icons.dashboard_rounded,
+      route: '/tasks/dashboard',
+      group: ModuleGroup.sales,
+      permission: 'contacts.view',
+      color: Color(0xFFE0475B),
     ),
     AppModule(
       id: 'crm_tasks',

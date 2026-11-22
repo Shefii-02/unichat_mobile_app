@@ -81,6 +81,7 @@ import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagr
 // CRM & Sales
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/deals_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/crm_tasks_admin_page.dart';
+import 'package:unichat_mobile_app/features/section_dashboards/section_dashboard_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/calendar_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/labels_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/segments_page.dart';
@@ -204,6 +205,17 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
     // shared tabbed class each, picked with `?tab=N` — every former tab is now its own
     // independent page/route (see AppModules and the cases below); the bare group path keeps
     // only the tab-0 page (the one AppModules' un-suffixed entry already pointed at).
+    // One dashboard per section (same server payload, one page).
+    case '/tasks/dashboard':
+      return const SectionDashboardPage(title: 'Tasks', endpoint: '/tasks/dashboard');
+    case '/meta-ads/dashboard':
+      return const SectionDashboardPage(title: 'Meta Ads', endpoint: '/meta-ads/dashboard');
+    case '/instagram/dashboard':
+      return const SectionDashboardPage(title: 'Instagram', endpoint: '/instagram/dashboard', channel: 'instagram');
+    case '/messenger/dashboard':
+      return const SectionDashboardPage(title: 'Messenger', endpoint: '/instagram/dashboard', channel: 'facebook');
+    case '/ai-agent/dashboard':
+      return const SectionDashboardPage(title: 'AI Agent', endpoint: '/wa-agent/dashboard');
     case '/meta-ads':
       return const MetaAdsInsightsPage();
     case '/instagram':

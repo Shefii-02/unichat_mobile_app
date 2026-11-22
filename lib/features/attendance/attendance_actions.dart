@@ -96,11 +96,27 @@ List<BreakChoice> breakChoices(Map<String, dynamic> me) {
   ];
 }
 
+/// Test hooks — a unit test has no camera or GPS, so it supplies the photo / position here. Always null in the app.
+@visibleForTesting
+Future<XFile?> Function(BuildContext context)? selfieCaptureOverride;
+
+@visibleForTesting
+Future<Position?> Function(Duration limit)? positionOverride;
+
+Future<Position?> _locate(Duration limit) =>
+    positionOverride != null ? positionOverride!(limit) : _bestEffortPosition(limit: limit);
+
+/// How long the punch waits for the server's latest settings before using the ones already on screen.
+const settingsReadLimit = Duration(seconds: 6);
+
+/// How long the dry-run check may take; after that the punch goes ahead and the real submit does the same checks.
+const precheckLimit = Duration(seconds: 8);
+
 /// Runs one HR attendance action (clock in/out, break start/end):
 /// 1. If this action's selfie toggle is on, opens the round selfie-capture
 ///    screen (capture → retake → OK) — cancelling it cancels the action.
-/// 2. Captures the device's GPS position, best-effort (mandatory for staff who
-///    must be at the office — see [geoRequiredFor]).
+/// 2. Only AFTER the photo: reads the device's GPS position (mandatory for staff who
+///    must be at the office — see [geoRequiredFor] — with "Try again" if it cannot be read).
 /// 3. Calls `/hr/attendance/precheck` (a dry run, nothing is written yet) so
 ///    a late/early-leave note or an out-of-radius reason gets asked for
 ///    proactively, before submitting — each check only runs if the company
@@ -122,14 +138,22 @@ Future<bool> attendanceAction(
   // Re-read the company's selfie / geofence toggles right before punching, so a
   // change made on the web Office Details page applies immediately instead of
   // waiting for this screen's cached copy to refresh. Falls back to the cached one.
+  // This read can be slow on a poor connection, so say what is happening straight away (it used to look frozen) and give up after a
+  // few seconds, carrying on with the settings already on screen.
   Map<String, dynamic> me = const {};
+  if (!context.mounted) return false;
+  final preparing = BlurLoadingOverlay.show(context, message: 'Getting ready…');
   try {
-    final fresh = await Api.one('/hr/attendance/me');
+    final fresh = await Api.one('/hr/attendance/me').timeout(settingsReadLimit);
     me = Map<String, dynamic>.from(fresh);
     if (fresh['settings'] is Map) {
       settings = (fresh['settings'] as Map).cast<String, dynamic>();
     }
-  } catch (_) {}
+  } catch (_) {
+    // offline or slow: the cached settings still decide selfie / location; the server re-checks everything on submit anyway
+  } finally {
+    preparing.hide();
+  }
 
   if (action == 'clock_out') {
     if (!context.mounted) return false;
@@ -137,20 +161,8 @@ Future<bool> attendanceAction(
     if (!confirmed) return false;
   }
 
-  // When the company enforces the office radius for this person, location is mandatory: get it
-  // up front (before the camera) so a missing GPS fix doesn't waste a selfie.
   final geoRequired = geoRequiredFor(settings);
   Position? position;
-  if (geoRequired) {
-    if (!context.mounted) return false;
-    final locating = BlurLoadingOverlay.show(context, message: 'Getting your location…');
-    position = await _bestEffortPosition();
-    locating.hide();
-    if (position == null) {
-      if (context.mounted) await _locationRequiredDialog(context);
-      return false;
-    }
-  }
 
   // Taking a break: which kind? (Only when the company defined break types — they carry the time and daily limits.)
   int? breakTypeId;
@@ -164,23 +176,42 @@ Future<bool> attendanceAction(
     }
   }
 
+  // 1) SELFIE — the camera opens first, straight after the swipe.
   XFile? selfie;
   if (selfieRequiredFor(settings, action)) {
     if (!context.mounted) return false;
-    final captured = await showDialog<XFile>(
-      context: context,
-      useRootNavigator: true,
-      barrierDismissible: false,
-      builder: (_) => const SelfieCapturePage(),
-    );
+    final captured = selfieCaptureOverride != null
+        ? await selfieCaptureOverride!(context)
+        : await showDialog<XFile>(
+            context: context,
+            useRootNavigator: true,
+            barrierDismissible: false,
+            builder: (_) => const SelfieCapturePage(),
+          );
     if (captured == null) return false;
     selfie = captured;
+  }
+
+  // 2) LOCATION — only now, with the photo already taken, check where the person is. When the company enforces the office radius for
+  // them the location is mandatory: if it cannot be read they can try again (the photo is kept) or cancel.
+  if (geoRequired) {
+    while (position == null) {
+      if (!context.mounted) return false;
+      final locating = BlurLoadingOverlay.show(context, message: 'Checking your location…');
+      position = await _locate(const Duration(seconds: 12));
+      locating.hide();
+      if (position != null) break;
+      if (!context.mounted) return false;
+      if (!await _locationRequiredDialog(context)) return false;   // false = cancel / opened settings
+    }
   }
 
   if (!context.mounted) return false;
   final checking = BlurLoadingOverlay.show(context, message: 'Validating…');
   // not mandatory for this person: take a location if it is quick, but never make them wait for it
-  position ??= await _bestEffortPosition(limit: const Duration(seconds: 5));
+  position ??= await _locate(const Duration(seconds: 5));
+
+  // 3) CHECK — against the server: inside the office radius or not, late or not. Only what this finds decides whether a reason is asked.
 
   String? note;
   String? radiusReason;
@@ -191,7 +222,7 @@ Future<bool> attendanceAction(
       'action': action,
       if (position != null) 'lat': position.latitude,
       if (position != null) 'lng': position.longitude,
-    }) as Map);
+    }).timeout(precheckLimit) as Map);
   } catch (_) {
     // Precheck is best-effort — the real submit's own validation (handled
     // below) still enforces the same rules if this call fails.
@@ -321,28 +352,35 @@ Future<int?> _pickBreakType(BuildContext context, List<BreakChoice> choices) {
   );
 }
 
-Future<void> _locationRequiredDialog(BuildContext context) {
-  return showDialog<void>(
+/// "We could not read your location" — true = try again (the selfie already taken is kept), false = cancel the punch.
+Future<bool> _locationRequiredDialog(BuildContext context) async {
+  final retry = await showDialog<bool>(
     context: context,
     useRootNavigator: true,
+    barrierDismissible: false,
     builder: (ctx) => AlertDialog(
       title: const Text('Location required'),
       content: const Text(
         'Your company requires your location for attendance. Turn on location '
-        'services and allow location access for this app, then try again.',
+        'services and allow location access for this app, then try again. Your photo is kept.',
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        TextButton(
           onPressed: () async {
-            Navigator.pop(ctx);
-            await Geolocator.openLocationSettings();
+            await Geolocator.openLocationSettings();   // the person comes back and presses "Try again"
           },
           child: const Text('Open settings'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Try again'),
         ),
       ],
     ),
   );
+  return retry ?? false;
 }
 
 Future<Position?> _bestEffortPosition({Duration limit = const Duration(seconds: 12)}) async {
@@ -431,6 +469,33 @@ Future<String?> _askReason(BuildContext context, String message) {
 }
 
 
+/// Minutes as hours:minutes - 687 -> "11:27", 45 -> "0:45", 60 -> "1:00".
+String formatDelay(int minutes) {
+  final m = minutes < 0 ? 0 : minutes;
+  return '${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')}';
+}
+
+/// "11:27 min late" / "0:30 min before time" ... for the delay the server measured; null when there is no delay to show.
+/// An older server sends no `delay_kind`: a clock-in with minutes and a late reason asked is late.
+String? delayLabel(Map<String, dynamic> check, {String action = 'clock_in'}) {
+  final mins = (check['late_minutes'] as num?)?.toInt() ?? 0;
+  if (mins <= 0) return null;
+  final kind = check['delay_kind'] ??
+      (action == 'clock_in' && (check['note_required'] == true || check['note_optional'] == true) ? 'late' : null);
+  final suffix = switch (kind) {
+    'late' => 'late',
+    'early_leave' => 'before time',
+    'overtime' => 'overtime',
+    'over_break' => 'over the break limit',
+    _ => null,
+  };
+  return suffix == null ? null : '${formatDelay(mins)} min $suffix';
+}
+
+/// Server messages say "687 min late" - show every "N min" inside them as hours:minutes ("11:27 min").
+String humanizeMinutes(String s) =>
+    s.replaceAllMapped(RegExp(r'\b(\d+) min\b'), (m) => '${formatDelay(int.parse(m[1]!))} min');
+
 /// Bottom sheet shown after the selfie/GPS/precheck steps — ONLY when the punch still has something to ask (see [punchAsk]): the
 /// radius alert when the person is outside the office, and/or the reason field (required, or optional when the company allows
 /// skipping a late reason). Shows the captured photo for context. Pops with the typed text ('' = none).
@@ -476,7 +541,8 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
     final required = radiusNeeded || noteNeeded;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + MediaQuery.of(context).viewInsets.bottom),
+      // generous bottom room: 28 of its own + the phone's gesture bar / notch, and the keyboard when it is open
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 28 + MediaQuery.of(context).viewPadding.bottom + MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -485,6 +551,22 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
             Text(_titles[widget.action] ?? 'Confirm',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
+            if (delayLabel(c, action: widget.action) case final delay?) ...[
+              Container(
+                key: const ValueKey('delay-badge'),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.schedule_rounded, size: 18, color: Colors.orange.shade800),
+                  const SizedBox(width: 6),
+                  Text(delay, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.orange.shade800)),
+                ]),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (widget.selfie != null)
               Center(
                 child: ClipOval(
@@ -509,7 +591,7 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${c['radius_message'] ?? 'You are outside the office radius.'} Add a reason to continue.',
+                        '${humanizeMinutes('${c['radius_message'] ?? 'You are outside the office radius.'}')} Add a reason to continue.',
                         style: const TextStyle(fontSize: 13, color: AppPalette.danger),
                       ),
                     ),
@@ -519,12 +601,12 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
             ],
             if (noteNeeded) ...[
               const SizedBox(height: 10),
-              Text('${c['note_message'] ?? 'A reason is required.'}',
+              Text(humanizeMinutes('${c['note_message'] ?? 'A reason is required.'}'),
                   key: const ValueKey('note-message'),
                   style: TextStyle(fontSize: 13, color: AppPalette.danger)),
             ] else if (noteOptional) ...[
               const SizedBox(height: 10),
-              Text('${c['note_message'] ?? 'You can add a reason (optional).'}',
+              Text(humanizeMinutes('${c['note_message'] ?? 'You can add a reason (optional).'}'),
                   key: const ValueKey('note-message'),
                   style: TextStyle(fontSize: 13, color: Colors.orange.shade800)),
             ],
@@ -543,7 +625,7 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
               ),
               onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 22),
             Row(
               children: [
                 Expanded(

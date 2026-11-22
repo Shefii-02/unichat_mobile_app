@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/network/api.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
+import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart' show formatDelay;
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
@@ -253,7 +255,7 @@ class _AttendanceReportState extends ConsumerState<AttendanceReport> {
         : !inAt
             ? _pill('Not in', const Color(0xFF9CA3AF))
             : lateMin > 0
-                ? _pill('Late ${lateMin}m', const Color(0xFFEA580C))
+                ? _pill('Late ${formatDelay(lateMin)} min', const Color(0xFFEA580C))
                 : _pill('On time', const Color(0xFF16A34A));
     Widget kv(IconData i, String t, Color c) => Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(i, size: 14, color: c),
@@ -419,6 +421,151 @@ class _SalesTeamReportState extends ConsumerState<SalesTeamReport> {
           cell('Missed', s['missed'], const Color(0xFFDC2626)),
           const Expanded(child: SizedBox.shrink()),
         ]),
+      ]),
+    );
+  }
+}
+
+
+// ───────────────────────── Team (HR · CRM · Leads) ─────────────────────────
+
+/// Mirrors the server's rule for GET /analytics/team-members: company admin / owner, a team head, or anyone with HR / staff-view access.
+bool canSeeTeam() =>
+    PermissionGuard.isAdmin ||
+    PermissionGuard.role.toLowerCase() == 'team_lead' ||
+    PermissionGuard.can('hr.manage') ||
+    PermissionGuard.can('hr.attendance.view_all') ||
+    PermissionGuard.can('staff.view');
+
+/// Every active member with their own figures for one section ('hr' | 'crm' | 'leads').
+final teamMembersProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
+    (ref, section) => Api.one('/analytics/team-members', query: {'section': section}),
+    // a refusal (403) must collapse the block at once — Riverpod 3 would otherwise retry it for minutes under a spinner
+    retry: (count, error) => null);
+
+class TeamMembersPanel extends ConsumerStatefulWidget {
+  const TeamMembersPanel({super.key, this.initial = 'hr'});
+  final String initial;
+  @override
+  ConsumerState<TeamMembersPanel> createState() => _TeamMembersPanelState();
+}
+
+class _TeamMembersPanelState extends ConsumerState<TeamMembersPanel> {
+  late String _tab = widget.initial;
+  static const _tabs = [('hr', 'HR'), ('crm', 'CRM'), ('leads', 'Leads')];
+
+  @override
+  Widget build(BuildContext context) {
+    final async = ref.watch(teamMembersProvider(_tab));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          for (final t in _tabs) ...[
+            ChoiceChip(
+              key: ValueKey('team-tab-${t.$1}'),
+              label: Text(t.$2),
+              selected: _tab == t.$1,
+              onSelected: (_) => setState(() => _tab = t.$1),
+              visualDensity: VisualDensity.compact,
+            ),
+            const SizedBox(width: 8),
+          ],
+        ]),
+        const SizedBox(height: 10),
+        async.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(20),
+            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+          ),
+          // 403 for people who may not see the team — show nothing rather than an error
+          error: (_, __) => const SizedBox.shrink(),
+          data: (d) {
+            final s = d['summary'] is Map ? d['summary'] as Map : const {};
+            final members = (d['members'] is List ? d['members'] as List : const []).whereType<Map>().toList();
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(spacing: 6, runSpacing: 6, children: _summary(s)),
+              const SizedBox(height: 8),
+              Text('${members.length} members', key: const ValueKey('team-count'),
+                  style: TextStyle(color: context.mutedColor, fontSize: 12)),
+              const SizedBox(height: 4),
+              for (final m in members) _member(context, m),
+            ]);
+          },
+        ),
+      ]),
+    );
+  }
+
+  List<Widget> _summary(Map s) {
+    String v(String k) => '${_n(s[k]).toInt()}';
+    return switch (_tab) {
+      'hr' => [
+          _pill('Working ${v('working')}', const Color(0xFF16A34A)),
+          _pill('Out ${v('out')}', const Color(0xFF6B7280)),
+          _pill('Leave ${v('on_leave')}', const Color(0xFF7C3AED)),
+          _pill('Not in ${v('not_in')}', const Color(0xFF9CA3AF)),
+          _pill('Late ${v('late')}', const Color(0xFFEA580C)),
+        ],
+      'crm' => [
+          _pill('Open deals ${v('open_deals')}', const Color(0xFF2563EB)),
+          _pill('Won ${v('won_month')}', const Color(0xFF16A34A)),
+          _pill('Tasks ${v('open_tasks')}', const Color(0xFF6B7280)),
+          _pill('Overdue ${v('overdue_tasks')}', const Color(0xFFDC2626)),
+        ],
+      _ => [
+          _pill('Assigned ${v('assigned')}', const Color(0xFF2563EB)),
+          _pill('Active ${v('active')}', const Color(0xFF6B7280)),
+          _pill('Enrolled ${v('enrolled')}', const Color(0xFF16A34A)),
+          _pill('New today ${v('new_today')}', const Color(0xFF0EA5E9)),
+          _pill('${_n(s['conversion'])}%', const Color(0xFFEA580C)),
+        ],
+    };
+  }
+
+  Widget _member(BuildContext context, Map m) {
+    final name = '${m['name'] ?? 'Staff'}';
+    final sub = [m['role'], m['department']].where((x) => x != null && '$x'.isNotEmpty).join(' · ');
+    Widget status;
+    switch (_tab) {
+      case 'hr':
+        final late = _n(m['late_minutes']).toInt();
+        final st = '${m['state']}';
+        final (label, color) = switch (st) {
+          'working' => ('Working', const Color(0xFF16A34A)),
+          'out' => ('Clocked out', const Color(0xFF6B7280)),
+          'on_leave' => ('On leave', const Color(0xFF7C3AED)),
+          _ => ('Not in', const Color(0xFF9CA3AF)),
+        };
+        status = Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, alignment: WrapAlignment.end, children: [
+          if (m['clock_in_at'] != null)
+            Text(_hm(m['clock_in_at']) + (m['clock_out_at'] != null ? ' – ${_hm(m['clock_out_at'])}' : ''),
+                style: TextStyle(color: context.mutedColor, fontSize: 11)),
+          if (late > 0) _pill('${formatDelay(late)} min late', const Color(0xFFEA580C)),
+          _pill(label, color),
+        ]);
+      case 'crm':
+        final over = _n(m['overdue_tasks']).toInt();
+        status = Text('${_n(m['open_deals']).toInt()} deals · ${_n(m['open_tasks']).toInt()} tasks${over > 0 ? ' · $over overdue' : ''}',
+            textAlign: TextAlign.end, style: const TextStyle(fontSize: 11.5));
+      default:
+        status = Text('${_n(m['assigned']).toInt()} assigned · ${_n(m['enrolled']).toInt()} enrolled (${_n(m['conversion'])}%)',
+            textAlign: TextAlign.end, style: const TextStyle(fontSize: 11.5));
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        _avatar(name, const Color(0xFF4F46E5)),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 5,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(m['is_me'] == true ? '$name (you)' : name,
+                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+            if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.mutedColor, fontSize: 11)),
+          ]),
+        ),
+        Expanded(flex: 6, child: Align(alignment: Alignment.centerRight, child: status)),
       ]),
     );
   }

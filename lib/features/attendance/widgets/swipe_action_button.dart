@@ -93,7 +93,9 @@ class _SwipeActionButtonState extends State<SwipeActionButton> with SingleTicker
                   child: Padding(
                     padding: EdgeInsets.only(left: thumb * 0.6),
                     child: Text(
-                      'Swipe to ${widget.label.toLowerCase()}  ›››',
+                      // while the punch is being prepared (settings, camera, location) say so — a thumb parked at the end with no
+                      // feedback looked exactly like a frozen button
+                      _busy ? 'Working…' : 'Swipe to ${widget.label.toLowerCase()}  ›››',
                       style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13),
                     ),
                   ),
@@ -114,6 +116,9 @@ class _SwipeActionButtonState extends State<SwipeActionButton> with SingleTicker
                             });
                             try {
                               await widget.onSwipe();
+                            } catch (e, st) {
+                              // a failure inside the punch must be reported, never left as an unhandled async error — and the button must reset
+                              FlutterError.reportError(FlutterErrorDetails(exception: e, stack: st, library: 'attendance swipe button'));
                             } finally {
                               if (mounted) {
                                 setState(() => _busy = false);
@@ -129,7 +134,12 @@ class _SwipeActionButtonState extends State<SwipeActionButton> with SingleTicker
                     width: thumb,
                     height: thumb,
                     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                    child: Icon(widget.icon, color: Colors.white, size: 22),
+                    child: _busy
+                        ? const Padding(
+                            padding: EdgeInsets.all(11),
+                            child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                          )
+                        : Icon(widget.icon, color: Colors.white, size: 22),
                   ),
                 ),
               ),

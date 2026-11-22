@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -18,6 +19,10 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
   XFile? _captured;
   String? _error;
   bool _initializing = true;
+  bool _capturing = false;
+
+  /// Opening the camera can hang (another app is using it, a permission prompt was dismissed) — never leave the person on a spinner.
+  static const cameraOpenLimit = Duration(seconds: 12);
 
   @override
   void initState() {
@@ -26,8 +31,9 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
   }
 
   Future<void> _init() async {
+    setState(() { _initializing = true; _error = null; });
     try {
-      final cameras = await availableCameras();
+      final cameras = await availableCameras().timeout(cameraOpenLimit);
       if (cameras.isEmpty) {
         setState(() {
           _error = 'No camera available on this device.';
@@ -41,7 +47,10 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
       );
       final controller =
           CameraController(front, ResolutionPreset.medium, enableAudio: false);
-      await controller.initialize();
+      await controller.initialize().timeout(cameraOpenLimit, onTimeout: () {
+        controller.dispose();
+        throw TimeoutException('camera did not open');
+      });
       if (!mounted) {
         await controller.dispose();
         return;
@@ -50,6 +59,13 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
         _controller = controller;
         _initializing = false;
       });
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          _error = 'The camera is taking too long to open. Close other apps that use the camera, then try again.';
+          _initializing = false;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -68,14 +84,18 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
 
   Future<void> _capture() async {
     final c = _controller;
-    if (c == null || !c.value.isInitialized || c.value.isTakingPicture) return;
+    if (c == null || !c.value.isInitialized || c.value.isTakingPicture || _capturing) return;
+    setState(() { _capturing = true; _error = null; });
     try {
-      final file = await c.takePicture();
-      if (mounted) setState(() => _captured = file);
+      final file = await c.takePicture().timeout(const Duration(seconds: 8));
+      if (mounted) setState(() { _captured = file; _capturing = false; });
     } catch (_) {
-      // shutter glitch — let them try again
+      // say so — a silent failure looked like a dead Capture button
+      if (mounted) setState(() { _capturing = false; _notice = 'Could not take the photo — please try again.'; });
     }
   }
+
+  String? _notice;
 
   void _retake() => setState(() => _captured = null);
 
@@ -98,6 +118,10 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
               borderRadius: BorderRadius.circular(14),
               child: ColoredBox(color: Colors.black, child: Center(child: _frame())),
             ),
+            if (_notice != null && _captured == null) ...[
+              const SizedBox(height: 10),
+              Text(_notice!, key: const ValueKey('selfie-notice'), style: const TextStyle(color: Colors.red, fontSize: 13)),
+            ],
             const SizedBox(height: 14),
             _actions(),
           ],
@@ -105,6 +129,10 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
       ),
     );
   }
+
+  /// The app theme makes every FilledButton "full width × 52" (`minimumSize: Size.fromHeight(52)`). Inside this dialog's Row that means an
+  /// INFINITE width, so the dialog failed to lay out and the selfie screen never appeared. Give these buttons a normal, content-sized minimum.
+  static final _buttonStyle = FilledButton.styleFrom(minimumSize: const Size(0, 44));
 
   Widget _actions() {
     if (_captured != null) {
@@ -114,6 +142,7 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
           TextButton(onPressed: _retake, child: const Text('Retake')),
           const SizedBox(width: 8),
           FilledButton(
+            style: _buttonStyle,
             onPressed: () => Navigator.pop(context, _captured),
             child: const Text('Use photo'),
           ),
@@ -127,9 +156,15 @@ class _SelfieCapturePageState extends State<SelfieCapturePage> {
         const SizedBox(width: 8),
         if (_error == null)
           FilledButton(
-            onPressed: _initializing ? null : _capture,
-            child: const Text('Capture'),
-          ),
+            style: _buttonStyle,
+            key: const ValueKey('selfie-capture'),
+            onPressed: (_initializing || _capturing) ? null : () { _notice = null; _capture(); },
+            child: _capturing
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Capture'),
+          )
+        else
+          FilledButton(style: _buttonStyle, key: const ValueKey('selfie-retry'), onPressed: _init, child: const Text('Try again')),
       ],
     );
   }

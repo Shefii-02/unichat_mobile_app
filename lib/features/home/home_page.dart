@@ -573,6 +573,9 @@ class _StatsStrip extends ConsumerWidget {
             ('Attendance', Icons.groups_rounded, const Color(0xFFEC4899), const []),
           if (PermissionGuard.entitled('leads') && PermissionGuard.can('staff.view'))
             ('Sales team', Icons.trending_up_rounded, const Color(0xFF22C55E), const []),
+          // company admin / team head: every member for HR, CRM and Leads in one place
+          if (canSeeTeam())
+            ('Team', Icons.diversity_3_rounded, const Color(0xFF4F46E5), const []),
         ];
         if (groups.isEmpty) return const SizedBox(height: 0);
         return _StatsGroups(groups: groups, overview: d);
@@ -646,6 +649,8 @@ class _StatsGroupsState extends State<_StatsGroups> {
             const AttendanceReport()
           else if (g.$1 == 'Sales team')
             const SalesTeamReport()
+          else if (g.$1 == 'Team')
+            const TeamMembersPanel()
 
           else if (g.$1 == 'WA Cloud')
             const WaCloudUsageCards()
@@ -677,7 +682,7 @@ class _StatsGroupsState extends State<_StatsGroups> {
                 ),
               ),
             ),
-          if (g.$1 == 'Accounts' || g.$1 == 'Attendance' || g.$1 == 'Sales team')
+          if (g.$1 == 'Accounts' || g.$1 == 'Attendance' || g.$1 == 'Sales team' || g.$1 == 'Team')
             const SizedBox.shrink()
           else if (g.$1 == 'WA Cloud')
             const Column(children: [

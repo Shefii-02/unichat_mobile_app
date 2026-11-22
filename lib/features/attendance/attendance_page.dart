@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
+import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart' show formatDelay;
 import 'package:unichat_mobile_app/features/attendance/widgets/attendance_status_card.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
@@ -215,7 +216,8 @@ class _RecentActivity extends ConsumerWidget {
                         ? 'Today, ${_shortMonth(workDate.month)} ${workDate.day}'
                         : '${_weekdayName(workDate.weekday)}, ${_shortMonth(workDate.month)} ${workDate.day}';
                 final range = '${time12(r['clock_in_at'])} – ${r['clock_out_at'] != null ? time12(r['clock_out_at']) : 'now'}';
-                final late = (r['late_minutes'] ?? 0) is num && (r['late_minutes'] as num) > 0;
+                final lateMin = ((r['late_minutes'] ?? 0) is num ? (r['late_minutes'] as num).toInt() : 0);
+                final late = lateMin > 0;
 
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
@@ -230,6 +232,10 @@ class _RecentActivity extends ConsumerWidget {
                       Expanded(
                         child: Text(dateLabel, style: const TextStyle(fontSize: 12)),
                       ),
+                      if (late) ...[
+                        Text('Late ${formatDelay(lateMin)} min', key: const ValueKey('recent-late'), style: const TextStyle(fontSize: 11, color: Color(0xFFEA580C), fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 8),
+                      ],
                       Text(range, style: TextStyle(fontSize: 11, color: context.mutedColor)),
                     ],
                   ),
