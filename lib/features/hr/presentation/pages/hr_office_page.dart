@@ -23,6 +23,7 @@ class HrOfficePage extends ConsumerWidget {
           KvRow('Geofence radius', '${s['geofence_radius_m'] ?? '—'} m'),
           KvRow('Geofence mandatory', s['geofence_mandatory'] == true ? 'Yes' : 'No'),
           KvRow('Late grace', '${s['grace_minutes'] ?? 0} min'),
+          KvRow('Late clock-in reason', _lateNoteLabel(_lateNoteMode(s))),
           KvRow('Timezone', str(s['timezone'])),
           KvRow('Reopen requests', s['reopen_auto_approve'] == true ? 'Auto-approved' : 'Needs manager approval'),
           const SizedBox(height: 16),
@@ -47,6 +48,13 @@ class HrOfficePage extends ConsumerWidget {
         FText(label: 'Office end (HH:mm)', initial: (s['office_end'] as String?)?.substring(0, 5), onSaved: (v) => v.isEmpty ? null : data['office_end'] = v),
         FNumber(label: 'Geofence radius (m)', initial: s['geofence_radius_m'] as num?, onSaved: (v) => data['geofence_radius_m'] = v),
         FNumber(label: 'Late grace (minutes)', initial: s['grace_minutes'] as num?, onSaved: (v) => data['grace_minutes'] = v),
+        FSelect<String>(
+          label: 'Late clock-in reason',
+          options: const ['required', 'optional', 'off'],
+          initial: _lateNoteMode(s),
+          labelOf: _lateNoteLabel,
+          onSaved: (v) => data['late_note_mode'] = v ?? 'required',
+        ),
         FText(label: 'Timezone', initial: s['timezone'] as String?, onSaved: (v) => v.isEmpty ? null : data['timezone'] = v),
         FBoolField(
           label: 'Auto-approve reopen requests',
@@ -59,4 +67,16 @@ class HrOfficePage extends ConsumerWidget {
     );
     if (ok) ref.invalidate(hrSettingsProvider);
   }
+
+  static String _lateNoteMode(Rec s) {
+    final m = s['late_note_mode'];
+    if (m == 'required' || m == 'optional' || m == 'off') return m as String;
+    return s['require_late_note'] == false ? 'off' : 'required';
+  }
+
+  static String _lateNoteLabel(String m) => switch (m) {
+        'required' => 'Required',
+        'optional' => 'Optional (can skip)',
+        _ => 'Off (never asked)',
+      };
 }

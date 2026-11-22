@@ -1,6 +1,7 @@
 import 'package:unichat_mobile_app/services/push_service.dart';
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:unichat_mobile_app/core/storage/local_storage.dart';
 import 'package:unichat_mobile_app/core/storage/secure_storage.dart';
 import 'package:unichat_mobile_app/features/app_lock/app_lock_provider.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
@@ -30,6 +31,20 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     if (state.hasValue && state.value != null) {
       ref.read(appLockProvider.notifier).requireUnlockAfterLogin();
     }
+  }
+
+  /// Device-limit recovery for email + password sign-in: free one phone, then repeat the same sign-in. Returns the new limit if the
+  /// account is STILL over it (so the sheet can show the fresh list), or `null` once signed in.
+  Future<DeviceLimitException?> removeDeviceAndRetry({
+    required DeviceLimitException limit,
+    required int deviceId,
+    required String email,
+    required String password,
+  }) async {
+    await ref.read(authRepositoryProvider).removeDevice(limitToken: limit.limitToken ?? '', deviceId: deviceId);
+    await login(email, password);
+    final err = state.error;
+    return err is DeviceLimitException ? err : null;
   }
 
   /// Called by the device-login flow once `claim` has persisted the session.
@@ -85,7 +100,11 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     await PushService.instance.unregister();
     await ref.read(deviceAuthRepositoryProvider).logout();
     await ref.read(authRepositoryProvider).logout();
-    if (clearAppLock) await ref.read(appLockProvider.notifier).disableMpin();
+    if (clearAppLock) {
+      await ref.read(appLockProvider.notifier).disableMpin();
+      // the PIN is gone, so the next sign-in offers "set a PIN or skip" again (signing out keeps this flag otherwise — see LocalStorage.clearSession)
+      await LocalStorage.remove(LocalStorage.kAppLockSetupPromptSeen);
+    }
     ref.read(attendanceGateProvider.notifier).clear();
     state = const AsyncData(null);
   }

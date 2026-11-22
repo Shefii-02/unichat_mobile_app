@@ -15,6 +15,16 @@ class WaChatApi {
 
   static Future<void> deleteSession(int id) => Api.delete('/waha/sessions/$id');
 
+  /// Delete a session known by its GATEWAY id: Laravel removes it on the gateway (admin key), checks the gateway really did, and only then
+  /// drops its own record. Deleting straight on the gateway used to leave the Laravel record behind. [direct] is the fallback for a session
+  /// that has no local record (created on the gateway directly).
+  static Future<void> deleteSessionByGatewayId(String gatewayId, Future<void> Function() direct) async {
+    final rows = await sessions();
+    final local = rows.where((r) => '${r['session_name']}' == gatewayId).toList();
+    if (local.isEmpty) return direct();
+    await deleteSession((local.first['id'] as num).toInt());
+  }
+
   static Future<Map<String, dynamic>> startSession(int id) => Api.post('/waha/sessions/$id/start');
 
   static Future<Map<String, dynamic>> stopSession(int id) => Api.post('/waha/sessions/$id/stop');

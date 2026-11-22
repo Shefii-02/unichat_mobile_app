@@ -66,14 +66,16 @@ class AppLockNotifier extends Notifier<AppLockState> {
   }
 
   Future<void> refresh() async {
-    final hasMpin = await SecureStorageService.hasMpin();
-    final biometricEnabled = await SecureStorageService.isBiometricEnabled();
+    // Ask the (slow, platform) biometrics question FIRST and read the stored PIN state LAST, right before writing it — the other way
+    // round, a PIN created while this was still waiting got overwritten with the "no PIN yet" answer read before it.
     bool biometricAvailable = false;
     try {
       biometricAvailable = await _localAuth.canCheckBiometrics && await _localAuth.isDeviceSupported();
     } catch (_) {
       biometricAvailable = false;
     }
+    final hasMpin = await SecureStorageService.hasMpin();
+    final biometricEnabled = await SecureStorageService.isBiometricEnabled();
     state = state.copyWith(
       loaded: true,
       hasMpin: hasMpin,

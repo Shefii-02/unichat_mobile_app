@@ -3,6 +3,7 @@ import 'package:unichat_mobile_app/core/network/dio_client.dart';
 import 'package:unichat_mobile_app/core/storage/secure_storage.dart';
 import 'package:unichat_mobile_app/core/storage/local_storage.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
+import 'device_auth_repository.dart';
 import 'models/user_model.dart';
 
 enum TokenRefreshResult { refreshed, invalid, networkError }
@@ -14,10 +15,21 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    final res = await _dio.post('/auth/login', data: {
-      'email': email,
-      'password': password,
-    });
+    // The phone registers itself on every sign-in: over the account's phone limit the server answers 409 `device_limit` with the
+    // phones to remove — thrown as a [DeviceLimitException] for the login page to turn into a "remove one to continue" sheet.
+    final Response res;
+    try {
+      res = await _dio.post('/auth/login', data: {
+        'email': email,
+        'password': password,
+        ...await DeviceAuthRepository().deviceFields(),
+      });
+    } on DioException catch (e) {
+      if (DeviceLimitException.isLimitResponse(e)) {
+        throw DeviceLimitException.fromJson(e.response!.data as Map<String, dynamic>);
+      }
+      rethrow;
+    }
 
     // Response: { "data": { "access_token": "...", "user": { ... } } }
     final envelope = res.data as Map<String, dynamic>;
@@ -30,6 +42,18 @@ class AuthRepository {
     PermissionGuard.setPermissions(user.permissions, user.role);
     PermissionGuard.setEntitlements(user.entitledModules);
     return user;
+  }
+
+  /// Frees one phone slot while signing in with email + password (see [DeviceLimitException.limitToken]) — the caller then repeats [login].
+  Future<void> removeDevice({required String limitToken, required int deviceId}) async {
+    try {
+      await _dio.post('/auth/mobile-devices/remove', data: {'limit_token': limitToken, 'device_id': deviceId});
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw DeviceChallengeException(data is Map && data['message'] is String
+          ? data['message'] as String
+          : 'Could not remove that phone. Try again.');
+    }
   }
 
   Future<UserModel?> getStoredUser() async {
@@ -78,7 +102,7 @@ class AuthRepository {
       // ignore network errors on logout
     } finally {
       await SecureStorageService.clearAll();
-      await LocalStorage.clear();
+      await LocalStorage.clearSession();   // not clear(): theme, language, onboarding and the device id belong to the phone, not the person
       PermissionGuard.clear();
     }
   }

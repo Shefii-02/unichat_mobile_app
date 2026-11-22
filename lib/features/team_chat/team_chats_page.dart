@@ -5,6 +5,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/core/socket/socket_service.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_actions.dart';
+import 'package:unichat_mobile_app/features/team_chat/delete_group_dialog.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -102,8 +103,39 @@ class _TeamChatsPageState extends ConsumerState<TeamChatsPage> {
     setState(() => _searchOpen = false);
   }
 
+  /// Shown when the plan does not include Team chat or the role may not use it.
+  Widget _locked(BuildContext context) {
+    final inPlan = PermissionGuard.entitled('team_chat');
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: GlassBackground(
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.lock_outline_rounded, size: 48, color: Glass.muted(context)),
+                const SizedBox(height: 12),
+                Text('Team chat is not available', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Glass.text(context))),
+                const SizedBox(height: 6),
+                Text(
+                  inPlan
+                      ? 'Your role does not have permission to use team chat. Ask your admin to enable it.'
+                      : 'Team chat is not part of your company\'s plan. Ask your admin to upgrade the plan or buy the add-on.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Glass.muted(context)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!PermissionGuard.teamChatEnabled) return _locked(context);
     final st = ref.watch(teamChatsProvider);
     final unreadChats = st.count('unread_chats');
     final mentions = st.count('mentions');
@@ -141,7 +173,7 @@ class _TeamChatsPageState extends ConsumerState<TeamChatsPage> {
                 ),
                 _roundBtn(context, Icons.search_rounded, () => setState(() => _searchOpen = !_searchOpen)),
                 _roundBtn(context, Icons.star_rounded, () => context.push('/team-chat/starred')),
-                if (PermissionGuard.can('staff.manage')) _roundBtn(context, Icons.shield_outlined, () => context.push('/team-chat/admin')),
+                if (PermissionGuard.teamChatModerate) _roundBtn(context, Icons.shield_outlined, () => context.push('/team-chat/admin')),
               ]),
             ),
             // ── search ──
@@ -177,8 +209,10 @@ class _TeamChatsPageState extends ConsumerState<TeamChatsPage> {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
               child: Row(children: [
                 Expanded(child: GlassPill(icon: Icons.chat_bubble_rounded, label: 'New chat', filled: true, onTap: () => context.push('/team-chat/new'))),
-                const SizedBox(width: 10),
-                Expanded(child: GlassPill(icon: Icons.group_add_rounded, label: 'New group', onTap: () => context.push('/team-chat/new-group'))),
+                if (PermissionGuard.teamChatGroups) ...[
+                  const SizedBox(width: 10),
+                  Expanded(child: GlassPill(icon: Icons.group_add_rounded, label: 'New group', onTap: () => context.push('/team-chat/new-group'))),
+                ],
               ]),
             ),
             // ── tabs with counts ──
@@ -326,7 +360,17 @@ class _TeamChatsPageState extends ConsumerState<TeamChatsPage> {
                 SlidableAction(onPressed: (_) => _markRead(id), backgroundColor: Glass.accent, foregroundColor: Colors.white, icon: Icons.mark_chat_read_rounded, label: 'Read', borderRadius: BorderRadius.circular(18)),
               ])
             : null,
-        endActionPane: ActionPane(motion: const BehindMotion(), extentRatio: 0.3, children: [
+        endActionPane: ActionPane(motion: const BehindMotion(), extentRatio: 0.55, children: [
+            SlidableAction(
+              onPressed: (_) async {
+                if (await deleteChatFlow(context, chatId: id, name: '${c['name'] ?? 'this chat'}', group: group) != ChatForget.none) ref.read(teamChatsProvider.notifier).refresh();
+              },
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              icon: Icons.delete_rounded,
+              label: 'Delete',
+              borderRadius: BorderRadius.circular(18),
+            ),
           SlidableAction(
             onPressed: (_) => toggleMuteChat(context, ref, chatId: id, muted: muted),
             backgroundColor: const Color(0xFF64748B),

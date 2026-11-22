@@ -35,6 +35,21 @@ class LocalStorage {
   static Future<void> remove(String key) => _p.remove(key);
   static Future<void> clear() => _p.clear();
 
+  /// What belongs to THIS PHONE rather than to whoever is signed in — theme, language, "onboarding seen", the PIN-setup prompt flag,
+  /// the app's device id, the push token. Signing out must keep all of it: wiping it (the old `clear()`) re-showed the onboarding,
+  /// reset the theme and language, and forgot the device id so every login registered the phone as a brand-new device.
+  static const _deviceLevelKeys = {
+    kThemeMode, kLanguage, kBiometric, kBioSensitive, kOnboardingSeen, kDeviceUid, kDeviceName, kPushToken,
+    kAppLockSetupPromptSeen, kEdgeToEdge,
+  };
+
+  /// Sign-out: forget the signed-in person's cached data (profile, hidden modules, sticky notes …) but keep the phone's own settings.
+  static Future<void> clearSession() async {
+    for (final key in _p.getKeys().toList()) {
+      if (!_deviceLevelKeys.contains(key)) await _p.remove(key);
+    }
+  }
+
   // App-specific keys
   static const kThemeMode = 'theme_mode';
   static const kLanguage  = 'language';

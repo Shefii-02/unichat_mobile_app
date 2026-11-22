@@ -27,6 +27,11 @@ class PermissionGuard {
   static bool entitled(String? module) =>
       module == null || _entitled == null || _role == 'superadmin' || _entitled!.contains(module);
 
+  /// Team chat: the plan / add-on must include it AND the role must hold `team_chat.view` (groups / moderation have their own keys).
+  static bool get teamChatEnabled => entitled('team_chat') && can('team_chat.view');
+  static bool get teamChatGroups => teamChatEnabled && can('team_chat.groups');
+  static bool get teamChatModerate => teamChatEnabled && can('team_chat.moderate');
+
   static bool can(String permission) =>
       isOwner || _permissions.contains(permission);
   static bool canView(String section) => can('$section.view') || isAdmin;

@@ -60,6 +60,7 @@ class DeviceLimitException implements Exception {
     required this.devices,
     this.retryToken,
     this.retryPin,
+    this.limitToken,
   });
 
   final String message;
@@ -67,6 +68,30 @@ class DeviceLimitException implements Exception {
   final List<LinkedDevice> devices;
   final String? retryToken;
   final String? retryPin;
+
+  /// Email + password sign-in: the one-off ticket `POST /auth/mobile-devices/remove` needs, then the app repeats the login.
+  final String? limitToken;
+
+  /// Reads a 409 `device_limit` body, from either login route (QR/PIN claim or email + password).
+  factory DeviceLimitException.fromJson(Map<String, dynamic> d) {
+    final retry = (d['retry_with'] as Map?) ?? const {};
+    return DeviceLimitException(
+      message: d['message'] as String? ?? 'Device limit reached.',
+      max: d['max'] as int? ?? 2,
+      devices: ((d['devices'] as List?) ?? const [])
+          .map((e) => LinkedDevice.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      retryToken: retry['token'] as String?,
+      retryPin: retry['pin'] as String?,
+      limitToken: d['limit_token'] as String?,
+    );
+  }
+
+  /// True when [e] is the server saying "this account is at its phone limit".
+  static bool isLimitResponse(DioException e) =>
+      e.response?.statusCode == 409 &&
+      e.response?.data is Map &&
+      (e.response!.data as Map)['error'] == 'device_limit';
 }
 
 /// Thrown when the challenge is invalid / expired — surfaced to the user as
@@ -112,6 +137,17 @@ class DeviceAuthRepository {
     if (Platform.isAndroid) return 'android';
     return 'other';
   }
+
+  /// What this phone tells the server about itself — sent with every sign-in (QR, PIN and email + password) so the device limit
+  /// and "remove a device" flow behave the same whichever way someone logs in.
+  Future<Map<String, dynamic>> deviceFields() async => {
+        'device_uid': await deviceUid(),
+        'device_name': await _deviceName(),
+        'platform': _platform,
+        'app_version': '1.0.0',
+        if (LocalStorage.getString(LocalStorage.kPushToken) != null)
+          'push_token': LocalStorage.getString(LocalStorage.kPushToken),
+      };
 
   Map<String, dynamic> _credential({String? token, String? pin}) {
     if (token != null && token.isNotEmpty) return {'token': token};
@@ -171,35 +207,17 @@ class DeviceAuthRepository {
   /// Links this device and logs in. On success the JWT + user are persisted and
   /// the resolved [UserModel] is returned.
   Future<UserModel> claim({String? token, String? pin}) async {
-    final uid = await deviceUid();
     final payload = <String, dynamic>{
       ..._credential(token: token, pin: pin),
-      'device_uid': uid,
-      'device_name': await _deviceName(),
-      'platform': _platform,
-      'app_version': '1.0.0',
-      if (LocalStorage.getString(LocalStorage.kPushToken) != null)
-        'push_token': LocalStorage.getString(LocalStorage.kPushToken),
+      ...await deviceFields(),
     };
 
     try {
       final res = await _dio.post('/device-auth/claim', data: payload);
       return _persistSession(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 409 &&
-          (e.response?.data is Map) &&
-          (e.response!.data as Map)['error'] == 'device_limit') {
-        final d = e.response!.data as Map<String, dynamic>;
-        final retry = (d['retry_with'] as Map?) ?? const {};
-        throw DeviceLimitException(
-          message: d['message'] as String? ?? 'Device limit reached.',
-          max: d['max'] as int? ?? 2,
-          devices: ((d['devices'] as List?) ?? const [])
-              .map((e) => LinkedDevice.fromJson(e as Map<String, dynamic>))
-              .toList(),
-          retryToken: retry['token'] as String?,
-          retryPin: retry['pin'] as String?,
-        );
+      if (DeviceLimitException.isLimitResponse(e)) {
+        throw DeviceLimitException.fromJson(e.response!.data as Map<String, dynamic>);
       }
       throw _asChallengeError(e);
     }

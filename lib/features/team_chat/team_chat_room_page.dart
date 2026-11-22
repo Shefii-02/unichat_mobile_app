@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:unichat_mobile_app/features/team_chat/delete_group_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -832,6 +833,11 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => StarredMessagesPage(chatId: widget.chatId)));
                 case 'media':
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatMediaPage(chatId: widget.chatId, title: name)));
+                case 'delete':
+                  final res = await deleteChatFlow(context, chatId: widget.chatId, name: name, group: _group);
+                  if (res == ChatForget.none || !context.mounted) break;
+                  ref.read(teamChatsProvider.notifier).refresh();
+                  if (res == ChatForget.cleared) { _init(); } else { context.pop(); }
               }
             },
             itemBuilder: (_) => [
@@ -839,6 +845,7 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
               const PopupMenuItem(value: 'media', child: Text('Media, links and docs')),
               const PopupMenuItem(value: 'starred', child: Text('Starred messages')),
               PopupMenuItem(value: 'mute', child: Text(muted ? 'Unmute notifications' : 'Mute notifications')),
+              PopupMenuItem(value: 'delete', child: Text(_group ? 'Delete / clear group chat…' : 'Delete / clear chat…', style: const TextStyle(color: Colors.red))),
             ],
           ),
         ],

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:unichat_mobile_app/features/team_chat/delete_group_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -247,12 +248,10 @@ class _GroupInfoPageState extends ConsumerState<GroupInfoPage> {
                       _do(() => Api.delete('/team-chat/chats/${widget.chatId}/members/$me'), popAfter: true);
                     }
                   }, color: Colors.red),
-                  if (admin)
-                    _link(Icons.delete_forever_rounded, 'Delete group', () async {
-                      if (await _confirm('Delete group', 'This deletes the group and all its messages for everyone.', 'Delete')) {
-                        _do(() => Api.delete('/team-chat/chats/${widget.chatId}'), popAfter: true);
-                      }
-                    }, color: Colors.red),
+                  _link(Icons.delete_forever_rounded, 'Delete / clear chat…', () async {
+                    final res = await deleteChatFlow(context, chatId: widget.chatId, name: '${i['name'] ?? 'this group'}', group: true);
+                    if (res != ChatForget.none && mounted) Navigator.of(context).pop(true);
+                  }, color: Colors.red),
                 ]),
             ],
           ),

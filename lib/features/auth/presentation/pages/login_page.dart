@@ -1,9 +1,12 @@
 import 'package:unichat_mobile_app/core/widgets/teamzo_wordmark.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/widgets/app_button.dart';
+import 'package:unichat_mobile_app/features/auth/data/device_auth_repository.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:unichat_mobile_app/features/auth/presentation/widgets/device_limit_sheet.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -32,15 +35,52 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     );
     if (!mounted) return;
     final err = ref.read(authProvider).error;
+    if (err is DeviceLimitException) {
+      await _resolveDeviceLimit(err);
+      return;
+    }
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_errorMessage(err)), backgroundColor: AppColors.error),
       );
     }
+    // success: the router sees the signed-in user and takes the app on (PIN prompt → clock-in gate → home)
+  }
+
+  /// The account is at its phone limit: list the phones, let the person remove one, repeat the sign-in — and on success the router
+  /// carries on to the home screen by itself.
+  Future<void> _resolveDeviceLimit(DeviceLimitException first) async {
+    final email = _emailCtrl.text.trim();
+    final password = _passCtrl.text;
+    var current = first;
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => DeviceLimitSheet(
+        limit: first,
+        onRemove: (deviceId) async {
+          try {
+            final again = await ref.read(authProvider.notifier).removeDeviceAndRetry(
+                  limit: current, deviceId: deviceId, email: email, password: password);
+            if (again != null) { current = again; return DeviceLimitAgain(again); }
+            return const DeviceLimitDone();
+          } on DeviceChallengeException catch (e) {
+            return DeviceLimitFailed(e.message);
+          } catch (e) {
+            return DeviceLimitFailed(_errorMessage(e));
+          }
+        },
+      ),
+    );
   }
 
   String _errorMessage(Object err) {
     final s = err.toString();
+    // the admin switched this person's phone access off
+    if (err is DioException && err.response?.data is Map && (err.response!.data as Map)['error_code'] == 'mobile_access_disabled') {
+      return 'Mobile app access is disabled for your account.';
+    }
     if (s.contains('401') || s.contains('422')) return 'Invalid email or password.';
     if (s.contains('Connection') || s.contains('SocketException')) return 'No internet connection.';
     return 'Login failed. Please try again.';

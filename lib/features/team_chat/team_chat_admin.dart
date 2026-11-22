@@ -1,3 +1,4 @@
+import 'package:unichat_mobile_app/features/team_chat/delete_group_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:unichat_mobile_app/core/network/api.dart';
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
@@ -260,12 +261,14 @@ class _AdminGroupPageState extends State<AdminGroupPage> {
           title: Text('${d['name']}'),
           leading: BackButton(onPressed: () => Navigator.pop(context, _changed)),
           actions: [
+            if (canDeleteChats)
             IconButton(
               icon: const Icon(Icons.delete_forever_rounded, color: Colors.red),
               onPressed: () async {
-                if (await _confirm('Delete group', 'This deletes "${d['name']}" and all its messages for everyone.', 'Delete')) {
+                final withMedia = await askDeleteGroup(context, '${d['name']}');
+                if (withMedia != null) {
                   try {
-                    await Api.delete('/team-chat/admin/groups/${widget.groupId}');
+                    await Api.delete('/team-chat/admin/groups/${widget.groupId}?delete_media=${withMedia ? 1 : 0}');
                     if (mounted) Navigator.pop(context, true);
                   } catch (e) {
                     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));

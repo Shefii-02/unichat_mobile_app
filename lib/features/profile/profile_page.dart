@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/core/constants/api_constants.dart';
+import 'package:unichat_mobile_app/features/app_lock/app_lock_actions.dart';
+import 'package:unichat_mobile_app/features/app_lock/app_lock_provider.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
@@ -17,6 +19,8 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final user = ref.watch(authProvider).value;
+    final hasPin = ref.watch(appLockProvider.select((s) => s.hasMpin));
+    final lockLoaded = ref.watch(appLockProvider.select((s) => s.loaded));
     final dash = ref.watch(dashboardMeProvider).maybeWhen(orElse: () => null, data: (d) => d);
     final sales = ref.watch(salesMeProvider(null)).maybeWhen(orElse: () => null, data: (d) => d);
 
@@ -114,6 +118,18 @@ class ProfilePage extends ConsumerWidget {
               _MenuGroup(
                 label: 'Preferences',
                 items: [
+                  // The PIN lock is soft: asked once after login (set or skip) and switchable here at any time.
+                  _MenuItem(
+                    Icons.pin_outlined,
+                    'App lock PIN',
+                    keyName: 'profile-app-lock',
+                    onTap: () => hasPin ? turnOffAppLock(context, ref) : turnOnAppLock(context, ref),
+                    trailing: Switch(
+                      key: const ValueKey('profile-app-lock-switch'),
+                      value: hasPin,
+                      onChanged: lockLoaded ? (on) => on ? turnOnAppLock(context, ref) : turnOffAppLock(context, ref) : null,
+                    ),
+                  ),
                   _MenuItem(Icons.settings_outlined, 'Settings', onTap: () => context.push('/settings')),
                   _MenuItem(Icons.notifications_none_rounded, 'Notifications', onTap: () => context.push('/notifications')),
                   _MenuItem(Icons.headset_mic_outlined, 'Help and support', onTap: () => _comingSoon(context)),
@@ -161,11 +177,15 @@ class _StatTile extends StatelessWidget {
 }
 
 class _MenuItem {
-  const _MenuItem(this.icon, this.label, {required this.onTap, this.danger = false});
+  const _MenuItem(this.icon, this.label, {required this.onTap, this.danger = false, this.trailing, this.keyName});
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool danger;
+
+  /// Replaces the chevron (e.g. an on/off switch).
+  final Widget? trailing;
+  final String? keyName;
 }
 
 class _MenuGroup extends StatelessWidget {
@@ -198,6 +218,7 @@ class _MenuGroup extends StatelessWidget {
                         bottom: i == items.length - 1 ? const Radius.circular(12) : Radius.zero,
                       ),
                       child: Container(
+                        key: items[i].keyName != null ? ValueKey(items[i].keyName) : null,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                         decoration: BoxDecoration(
                           border: i < items.length - 1 ? Border(bottom: BorderSide(color: context.lineColor)) : null,
@@ -210,7 +231,9 @@ class _MenuGroup extends StatelessWidget {
                               child: Text(items[i].label,
                                   style: TextStyle(fontSize: 13, color: items[i].danger ? M.redMuted : null)),
                             ),
-                            if (!items[i].danger)
+                            if (items[i].trailing != null)
+                              items[i].trailing!
+                            else if (!items[i].danger)
                               Icon(Icons.chevron_right_rounded, size: 18, color: context.mutedColor),
                           ],
                         ),

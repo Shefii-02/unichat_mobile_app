@@ -237,7 +237,7 @@ class _WaSessionsPageState extends ConsumerState<WaSessionsPage> {
                 if (!await confirm(context, title: 'Delete session?', destructive: true, confirmLabel: 'Delete')) {
                   return;
                 }
-                await _act(s, (id, key) => WaChatApiService.deleteSession(id, key), success: 'Deleted');
+                await _act(s, (id, key) => WaChatApi.deleteSessionByGatewayId(id, () => WaChatApiService.deleteSession(id, key)), success: 'Deleted');
               },
             ),
           ]),

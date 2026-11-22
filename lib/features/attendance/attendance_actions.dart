@@ -23,16 +23,92 @@ bool selfieRequiredFor(Map<String, dynamic> settings, String action) {
   return settings['selfie_required_$action'] == true;
 }
 
+/// Must THIS person share their location before punching? The server works it out per person
+/// (`geo_required`: the company enforces the office radius, they are GPS-tracked and working from the office today).
+/// The company-wide `geofence_mandatory` switch alone is not enough — it used to block work-from-home and non-GPS
+/// colleagues with "Location required". An older server without `geo_required` falls back to the old switch.
+bool geoRequiredFor(Map<String, dynamic> settings) {
+  if (settings.containsKey('geo_required')) return settings['geo_required'] == true;
+  return settings['geofence_mandatory'] == true;
+}
+
+/// What the punch still has to ask once the selfie and location are done (from `/hr/attendance/precheck`).
+enum PunchAsk {
+  /// Nothing — submit straight away, no extra screen.
+  nothing,
+
+  /// Late and the company asks for a reason but lets you skip it.
+  optionalNote,
+
+  /// A reason must be typed: a late clock-in, an early / late clock-out, or a break that ran over.
+  requiredNote,
+
+  /// Outside the office radius (or no location) on a day the radius is enforced: alert + a reason.
+  radiusReason,
+}
+
+/// Decides whether the review sheet is needed at all. The selfie is already confirmed on its own "Use this photo?" step, and a
+/// punch that is on time and inside the radius has nothing to add — so no sheet, no empty "note" box, straight to the app.
+PunchAsk punchAsk(Map<String, dynamic> check) {
+  if (check['radius_reason_needed'] == true) return PunchAsk.radiusReason;
+  if (check['note_required'] == true) return PunchAsk.requiredNote;
+  if (check['note_optional'] == true) return PunchAsk.optionalNote;
+  return PunchAsk.nothing;
+}
+
+/// One choice in the "which break?" list.
+class BreakChoice {
+  const BreakChoice({required this.id, required this.name, this.maxMinutes, this.dailyLimit, this.usedToday = 0});
+  final int id;
+  final String name;
+  final int? maxMinutes;
+  final int? dailyLimit;
+  final int usedToday;
+
+  /// A type with a daily limit that has been used up cannot be chosen again today.
+  bool get exhausted => dailyLimit != null && usedToday >= dailyLimit!;
+
+  String get detail {
+    final parts = <String>[
+      if (maxMinutes != null) 'up to $maxMinutes min',
+      if (dailyLimit != null) '${(dailyLimit! - usedToday).clamp(0, dailyLimit!)} of $dailyLimit left today',
+    ];
+    return parts.join(' · ');
+  }
+}
+
+/// The break types the company defined (`break_types` in `/hr/attendance/me`) with how often each was used today.
+List<BreakChoice> breakChoices(Map<String, dynamic> me) {
+  final types = me['break_types'] is List ? (me['break_types'] as List).whereType<Map>() : const <Map>[];
+  final today = me['today'] is Map ? me['today'] as Map : const {};
+  final breaks = today['breaks'] is List ? (today['breaks'] as List).whereType<Map>().toList() : const <Map>[];
+  int? asInt(Object? v) => v == null ? null : int.tryParse('$v');
+  return [
+    for (final t in types)
+      if (t['is_active'] != false && asInt(t['id']) != null)
+        BreakChoice(
+          id: asInt(t['id'])!,
+          name: '${t['name'] ?? 'Break'}',
+          maxMinutes: asInt(t['max_minutes']),
+          dailyLimit: asInt(t['daily_limit']),
+          usedToday: breaks.where((b) => asInt(b['break_type_id']) == asInt(t['id'])).length,
+        ),
+  ];
+}
+
 /// Runs one HR attendance action (clock in/out, break start/end):
 /// 1. If this action's selfie toggle is on, opens the round selfie-capture
 ///    screen (capture → retake → OK) — cancelling it cancels the action.
-/// 2. Captures the device's GPS position, best-effort.
+/// 2. Captures the device's GPS position, best-effort (mandatory for staff who
+///    must be at the office — see [geoRequiredFor]).
 /// 3. Calls `/hr/attendance/precheck` (a dry run, nothing is written yet) so
 ///    a late/early-leave note or an out-of-radius reason gets asked for
 ///    proactively, before submitting — each check only runs if the company
 ///    has that setting turned on; if precheck can't be reached, it's skipped
 ///    and the actual submit's own validation below still catches it.
-/// 4. Submits, and if the backend still comes back asking for a reason
+/// 4. Only if the precheck says something still needs asking (see [punchAsk]) shows the
+///    review sheet; otherwise it submits straight away.
+/// 5. Submits, and if the backend still comes back asking for a reason
 ///    (a race between precheck and submit, or precheck being unreachable),
 ///    prompts for it and retries automatically.
 Future<bool> attendanceAction(
@@ -46,8 +122,10 @@ Future<bool> attendanceAction(
   // Re-read the company's selfie / geofence toggles right before punching, so a
   // change made on the web Office Details page applies immediately instead of
   // waiting for this screen's cached copy to refresh. Falls back to the cached one.
+  Map<String, dynamic> me = const {};
   try {
     final fresh = await Api.one('/hr/attendance/me');
+    me = Map<String, dynamic>.from(fresh);
     if (fresh['settings'] is Map) {
       settings = (fresh['settings'] as Map).cast<String, dynamic>();
     }
@@ -59,9 +137,9 @@ Future<bool> attendanceAction(
     if (!confirmed) return false;
   }
 
-  // When the company enforces the office radius, location is mandatory: get it
+  // When the company enforces the office radius for this person, location is mandatory: get it
   // up front (before the camera) so a missing GPS fix doesn't waste a selfie.
-  final geoRequired = settings['geofence_mandatory'] == true;
+  final geoRequired = geoRequiredFor(settings);
   Position? position;
   if (geoRequired) {
     if (!context.mounted) return false;
@@ -71,6 +149,18 @@ Future<bool> attendanceAction(
     if (position == null) {
       if (context.mounted) await _locationRequiredDialog(context);
       return false;
+    }
+  }
+
+  // Taking a break: which kind? (Only when the company defined break types — they carry the time and daily limits.)
+  int? breakTypeId;
+  if (action == 'break_start') {
+    final choices = breakChoices(me);
+    if (choices.isNotEmpty) {
+      if (!context.mounted) return false;
+      final picked = await _pickBreakType(context, choices);
+      if (picked == null) return false;
+      breakTypeId = picked;
     }
   }
 
@@ -89,7 +179,8 @@ Future<bool> attendanceAction(
 
   if (!context.mounted) return false;
   final checking = BlurLoadingOverlay.show(context, message: 'Validating…');
-  position ??= await _bestEffortPosition();
+  // not mandatory for this person: take a location if it is quick, but never make them wait for it
+  position ??= await _bestEffortPosition(limit: const Duration(seconds: 5));
 
   String? note;
   String? radiusReason;
@@ -107,12 +198,15 @@ Future<bool> attendanceAction(
   }
   checking.hide();
 
-  final radiusNeeded = check['radius_reason_needed'] == true;
+  final ask = punchAsk(check);
+  final radiusNeeded = ask == PunchAsk.radiusReason;
   final noteNeeded = check['note_required'] == true;
+  // company setting "Late clock-in reason = Optional": ask, but the person may skip
+  final noteOptional = check['note_optional'] == true;
 
-  // One modal for everything the punch needs: the captured photo, the radius
-  // result + message, and the note/reason field — instead of a chain of dialogs.
-  if (selfie != null || geoRequired || radiusNeeded || noteNeeded) {
+  // One modal for everything the punch still has to ask — the radius alert and/or the reason. When there is nothing to ask (on
+  // time, inside the radius, or the late-reason setting is off) there is NO sheet and no empty note box: it submits straight away.
+  if (ask != PunchAsk.nothing) {
     if (!context.mounted) return false;
     final text = await showModalBottomSheet<String>(
       context: context,
@@ -131,7 +225,7 @@ Future<bool> attendanceAction(
     if (text == null) return false;
     if (text.isNotEmpty) {
       if (radiusNeeded) radiusReason = text;
-      if (noteNeeded || !radiusNeeded) note = text;
+      if (noteNeeded || noteOptional) note = text;
     }
   }
 
@@ -143,6 +237,8 @@ Future<bool> attendanceAction(
       if (position != null) 'lng': position.longitude,
       if (note != null) 'note': note,
       if (radiusReason != null) 'radius_reason': radiusReason,
+      if (breakTypeId != null) 'break_type_id': breakTypeId,
+      'source': 'mobile',
     });
 
     if (!context.mounted) return false;
@@ -192,6 +288,39 @@ Future<bool> attendanceAction(
   }
 }
 
+/// "Which break?" — the company's break types with their time and daily limits; a type used up for today is greyed out.
+Future<int?> _pickBreakType(BuildContext context, List<BreakChoice> choices) {
+  return showModalBottomSheet<int>(
+    context: context,
+    useRootNavigator: true,
+    showDragHandle: true,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Which break?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          for (final c in choices)
+            ListTile(
+              key: ValueKey('break-type-${c.id}'),
+              enabled: !c.exhausted,
+              leading: const Icon(Icons.free_breakfast_rounded),
+              title: Text(c.name),
+              subtitle: c.detail.isEmpty ? null : Text(c.exhausted ? 'Daily limit reached' : c.detail),
+              onTap: c.exhausted ? null : () => Navigator.pop(ctx, c.id),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+}
+
 Future<void> _locationRequiredDialog(BuildContext context) {
   return showDialog<void>(
     context: context,
@@ -216,7 +345,7 @@ Future<void> _locationRequiredDialog(BuildContext context) {
   );
 }
 
-Future<Position?> _bestEffortPosition() async {
+Future<Position?> _bestEffortPosition({Duration limit = const Duration(seconds: 12)}) async {
   try {
     if (!await Geolocator.isLocationServiceEnabled()) return null;
     var permission = await Geolocator.checkPermission();
@@ -228,9 +357,9 @@ Future<Position?> _bestEffortPosition() async {
       return null;
     }
     return await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
+      locationSettings: LocationSettings(
         accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 12),
+        timeLimit: limit,
       ),
     );
   } catch (_) {
@@ -302,8 +431,9 @@ Future<String?> _askReason(BuildContext context, String message) {
 }
 
 
-/// Bottom sheet shown after the selfie/GPS/precheck steps: the captured photo, the radius
-/// verdict + message, and the note/reason field. Pops with the typed text ('' = none).
+/// Bottom sheet shown after the selfie/GPS/precheck steps — ONLY when the punch still has something to ask (see [punchAsk]): the
+/// radius alert when the person is outside the office, and/or the reason field (required, or optional when the company allows
+/// skipping a late reason). Shows the captured photo for context. Pops with the typed text ('' = none).
 class _PunchReviewSheet extends StatefulWidget {
   const _PunchReviewSheet({
     required this.action,
@@ -342,22 +472,8 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
     final c = widget.check;
     final radiusNeeded = c['radius_reason_needed'] == true;
     final noteNeeded = c['note_required'] == true;
+    final noteOptional = c['note_optional'] == true;
     final required = radiusNeeded || noteNeeded;
-    final distance = c['distance_m'];
-    final allowed = c['allowed_m'];
-
-    final String radiusText;
-    final Color radiusColor;
-    if (radiusNeeded) {
-      radiusText = '${c['radius_message'] ?? 'You are outside the office radius.'}';
-      radiusColor = AppPalette.danger;
-    } else if (distance != null) {
-      radiusText = "Location verified — $distance m from the office (allowed: $allowed m).";
-      radiusColor = Colors.green.shade700;
-    } else {
-      radiusText = widget.hasPosition ? 'Location captured.' : 'Location not available.';
-      radiusColor = context.mutedColor;
-    }
 
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + MediaQuery.of(context).viewInsets.bottom),
@@ -375,27 +491,50 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
                   child: Image.file(File(widget.selfie!.path), width: 110, height: 110, fit: BoxFit.cover),
                 ),
               ),
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(radiusNeeded ? Icons.location_off_rounded : Icons.location_on_rounded,
-                    size: 18, color: radiusColor),
-                const SizedBox(width: 8),
-                Expanded(child: Text(radiusText, style: TextStyle(fontSize: 13, color: radiusColor))),
-              ],
-            ),
+            // Geo alert: only when the person is outside the radius (or no location) — never shown for someone who is in range.
+            if (radiusNeeded) ...[
+              const SizedBox(height: 12),
+              Container(
+                key: const ValueKey('radius-alert'),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppPalette.danger.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppPalette.danger.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.location_off_rounded, size: 18, color: AppPalette.danger),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${c['radius_message'] ?? 'You are outside the office radius.'} Add a reason to continue.',
+                        style: const TextStyle(fontSize: 13, color: AppPalette.danger),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (noteNeeded) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Text('${c['note_message'] ?? 'A reason is required.'}',
+                  key: const ValueKey('note-message'),
                   style: TextStyle(fontSize: 13, color: AppPalette.danger)),
+            ] else if (noteOptional) ...[
+              const SizedBox(height: 10),
+              Text('${c['note_message'] ?? 'You can add a reason (optional).'}',
+                  key: const ValueKey('note-message'),
+                  style: TextStyle(fontSize: 13, color: Colors.orange.shade800)),
             ],
             const SizedBox(height: 12),
             TextField(
+              key: const ValueKey('reason-field'),
               controller: _controller,
               maxLines: 2,
               decoration: InputDecoration(
-                labelText: required ? 'Reason (required)' : 'Note (optional)',
+                labelText: required ? 'Reason (required)' : 'Reason for being late (optional)',
                 hintText: 'e.g. Traffic delay',
                 border: const OutlineInputBorder(),
                 errorText: _submitted && required && _controller.text.trim().isEmpty
@@ -416,6 +555,7 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
+                    key: const ValueKey('punch-submit'),
                     onPressed: () {
                       final v = _controller.text.trim();
                       if (required && v.isEmpty) {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/nav/hidden_modules_provider.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_data.dart';
 import 'package:unichat_mobile_app/services/push_service.dart';
 
@@ -31,8 +32,8 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(mobileHiddenModulesProvider); // loads the superadmin's hidden-tile list
-    ref.watch(teamChatRealtimeProvider); // keeps the staff socket up + refreshes chats on events
-    final chatUnread = ref.watch(teamUnreadProvider);
+    if (PermissionGuard.teamChatEnabled) ref.watch(teamChatRealtimeProvider); // keeps the staff socket up + refreshes chats on events
+    final chatUnread = PermissionGuard.teamChatEnabled ? ref.watch(teamUnreadProvider) : 0;
     PushService.instance.onOpenTeamChat = (id) => context.push('/team-chat/$id');
     final idx = navigationShell.currentIndex;
     final theme = Theme.of(context);
