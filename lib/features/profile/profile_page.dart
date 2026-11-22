@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:unichat_mobile_app/core/nav/mobile_config_provider.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/core/constants/api_constants.dart';
 import 'package:unichat_mobile_app/features/app_lock/app_lock_actions.dart';
@@ -21,15 +22,31 @@ class ProfilePage extends ConsumerWidget {
     final user = ref.watch(authProvider).value;
     final hasPin = ref.watch(appLockProvider.select((s) => s.hasMpin));
     final lockLoaded = ref.watch(appLockProvider.select((s) => s.loaded));
-    final dash = ref.watch(dashboardMeProvider).maybeWhen(orElse: () => null, data: (d) => d);
-    final sales = ref.watch(salesMeProvider(null)).maybeWhen(orElse: () => null, data: (d) => d);
+    final dash = ref
+        .watch(dashboardMeProvider)
+        .maybeWhen(orElse: () => null, data: (d) => d);
+    final sales = ref
+        .watch(salesMeProvider(null))
+        .maybeWhen(orElse: () => null, data: (d) => d);
+
+    final cfg = ref
+        .watch(mobileConfigProvider)
+        .maybeWhen(data: (c) => c, orElse: () => const MobileConfig());
 
     final name = user?.name ?? '';
-    final initials = name.trim().isEmpty
-        ? '?'
-        : name.trim().split(' ').where((w) => w.isNotEmpty).map((w) => w[0].toUpperCase()).take(2).join();
+    final initials =
+        name.trim().isEmpty
+            ? '?'
+            : name
+                .trim()
+                .split(' ')
+                .where((w) => w.isNotEmpty)
+                .map((w) => w[0].toUpperCase())
+                .take(2)
+                .join();
     final rank = (dash?['rank'] is Map) ? (dash!['rank'] as Map) : const {};
-    final streak = (dash?['streak'] is Map) ? (dash!['streak'] as Map) : const {};
+    final streak =
+        (dash?['streak'] is Map) ? (dash!['streak'] as Map) : const {};
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -52,26 +69,59 @@ class ProfilePage extends ConsumerWidget {
                     CircleAvatar(
                       radius: 36,
                       backgroundColor: M.heroAvatarBg,
-                      backgroundImage: resolveStorageUrl(user?.avatar) != null
-                          ? NetworkImage(resolveStorageUrl(user!.avatar)!)
-                          : null,
-                      child: (user?.avatar == null || user!.avatar!.isEmpty)
-                          ? Text(initials, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 20, color: M.heroAvatarText))
-                          : null,
+                      backgroundImage:
+                          resolveStorageUrl(user?.avatar) != null
+                              ? NetworkImage(resolveStorageUrl(user!.avatar)!)
+                              : null,
+                      child:
+                          (user?.avatar == null || user!.avatar!.isEmpty)
+                              ? Text(
+                                initials,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 20,
+                                  color: M.heroAvatarText,
+                                ),
+                              )
+                              : null,
                     ),
                     const SizedBox(height: 10),
-                    Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
-                      child: Text(_titleCase(user?.role ?? ''), style: const TextStyle(fontSize: 12, color: M.heroMuted)),
+                      child: Text(
+                        _titleCase(user?.role ?? ''),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: M.heroMuted,
+                        ),
+                      ),
                     ),
                     if ((user?.companyName ?? '').isNotEmpty)
                       Container(
                         margin: const EdgeInsets.only(top: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-                        child: Text(user!.companyName!, style: const TextStyle(fontSize: 11, color: Colors.white)),
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          user!.companyName!,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -82,7 +132,10 @@ class ProfilePage extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: _StatTile(
-                        value: sales?['achieved'] != null ? '₹${compact(sales!['achieved'])}' : '—',
+                        value:
+                            sales?['achieved'] != null
+                                ? '₹${compact(sales!['achieved'])}'
+                                : '—',
                         label: 'This month',
                         tint: tintGreen,
                       ),
@@ -90,7 +143,10 @@ class ProfilePage extends ConsumerWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _StatTile(
-                        value: rank['position'] != null ? '#${rank['position']}' : '—',
+                        value:
+                            rank['position'] != null
+                                ? '#${rank['position']}'
+                                : '—',
                         label: 'Team rank',
                         tint: tintAmber,
                       ),
@@ -109,32 +165,85 @@ class ProfilePage extends ConsumerWidget {
               _MenuGroup(
                 label: 'Account',
                 items: [
-                  _MenuItem(Icons.person_outline_rounded, 'Personal details', onTap: () => context.push('/edit-profile')),
-                  _MenuItem(Icons.folder_outlined, 'Documents', onTap: () => _comingSoon(context)),
-                  _MenuItem(Icons.event_available_outlined, 'Leave', onTap: () => context.push('/hr')),
-                  _MenuItem(Icons.devices_rounded, 'Linked devices', onTap: () => context.push('/devices')),
+                  if (cfg.profileItem('personal'))
+                    _MenuItem(
+                      Icons.person_outline_rounded,
+                      'Personal details',
+                      onTap: () => context.push('/edit-profile'),
+                    ),
+                  if (cfg.profileItem('documents'))
+                    _MenuItem(
+                      Icons.folder_outlined,
+                      'Documents',
+                      onTap: () => context.push('/documents'),
+                    ),
+                  if (cfg.profileItem('leave'))
+                    _MenuItem(
+                      Icons.event_available_outlined,
+                      'Leave',
+                      onTap: () => context.push('/my-leave'),
+                    ),
+                  if (cfg.profileItem('devices'))
+                    _MenuItem(
+                      Icons.devices_rounded,
+                      'Linked devices',
+                      onTap: () => context.push('/devices'),
+                    ),
                 ],
               ),
               _MenuGroup(
                 label: 'Preferences',
                 items: [
                   // The PIN lock is soft: asked once after login (set or skip) and switchable here at any time.
-                  _MenuItem(
-                    Icons.pin_outlined,
-                    'App lock PIN',
-                    keyName: 'profile-app-lock',
-                    onTap: () => hasPin ? turnOffAppLock(context, ref) : turnOnAppLock(context, ref),
-                    trailing: Switch(
-                      key: const ValueKey('profile-app-lock-switch'),
-                      value: hasPin,
-                      onChanged: lockLoaded ? (on) => on ? turnOnAppLock(context, ref) : turnOffAppLock(context, ref) : null,
+                  if (cfg.profileItem('app_lock'))
+                    _MenuItem(
+                      Icons.pin_outlined,
+                      'App lock PIN',
+                      keyName: 'profile-app-lock',
+                      onTap:
+                          () =>
+                              hasPin
+                                  ? turnOffAppLock(context, ref)
+                                  : turnOnAppLock(context, ref),
+                      trailing: Switch(
+                        key: const ValueKey('profile-app-lock-switch'),
+                        value: hasPin,
+                        onChanged:
+                            lockLoaded
+                                ? (on) =>
+                                    on
+                                        ? turnOnAppLock(context, ref)
+                                        : turnOffAppLock(context, ref)
+                                : null,
+                      ),
                     ),
+                  if (cfg.profileItem('settings'))
+                    _MenuItem(
+                      Icons.settings_outlined,
+                      'Settings',
+                      onTap: () => context.push('/settings'),
+                    ),
+                  if (cfg.profileItem('notifications'))
+                    _MenuItem(
+                      Icons.notifications_none_rounded,
+                      'Notifications',
+                      onTap: () => context.push('/notifications'),
+                    ),
+                  if (cfg.profileItem('help'))
+                    _MenuItem(
+                      Icons.headset_mic_outlined,
+                      'Help and support',
+                      onTap: () => context.push('/help'),
+                    ),
+                  _MenuItem(
+                    Icons.logout_rounded,
+                    'Log out',
+                    danger: true,
+                    onTap:
+                        () => ref
+                            .read(authProvider.notifier)
+                            .logout(clearAppLock: true),
                   ),
-                  _MenuItem(Icons.settings_outlined, 'Settings', onTap: () => context.push('/settings')),
-                  _MenuItem(Icons.notifications_none_rounded, 'Notifications', onTap: () => context.push('/notifications')),
-                  _MenuItem(Icons.headset_mic_outlined, 'Help and support', onTap: () => _comingSoon(context)),
-                  _MenuItem(Icons.logout_rounded, 'Log out', danger: true,
-                      onTap: () => ref.read(authProvider.notifier).logout(clearAppLock: true)),
                 ],
               ),
               const SizedBox(height: 16),
@@ -145,18 +254,23 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 
-  static void _comingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('Coming soon.')));
-  }
-
   static String _titleCase(String s) =>
-      s.isEmpty ? s : s.split('_').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+      s.isEmpty
+          ? s
+          : s
+              .split('_')
+              .map(
+                (w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
+              )
+              .join(' ');
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile({required this.value, required this.label, required this.tint});
+  const _StatTile({
+    required this.value,
+    required this.label,
+    required this.tint,
+  });
   final String value;
   final String label;
   final Tint tint;
@@ -165,10 +279,20 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 9),
-      decoration: BoxDecoration(color: tint.$1, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: tint.$1,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: tint.$2)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: tint.$2,
+            ),
+          ),
           Text(label, style: TextStyle(fontSize: 9, color: tint.$3)),
         ],
       ),
@@ -177,7 +301,14 @@ class _StatTile extends StatelessWidget {
 }
 
 class _MenuItem {
-  const _MenuItem(this.icon, this.label, {required this.onTap, this.danger = false, this.trailing, this.keyName});
+  const _MenuItem(
+    this.icon,
+    this.label, {
+    required this.onTap,
+    this.danger = false,
+    this.trailing,
+    this.keyName,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -195,6 +326,7 @@ class _MenuGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: Column(
@@ -202,10 +334,16 @@ class _MenuGroup extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 6),
-            child: Text(label, style: TextStyle(fontSize: 11, color: context.mutedColor)),
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: context.mutedColor),
+            ),
           ),
           Container(
-            decoration: BoxDecoration(color: context.altSurface, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: context.altSurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Column(
               children: [
                 for (int i = 0; i < items.length; i++)
@@ -215,26 +353,58 @@ class _MenuGroup extends StatelessWidget {
                       onTap: items[i].onTap,
                       borderRadius: BorderRadius.vertical(
                         top: i == 0 ? const Radius.circular(12) : Radius.zero,
-                        bottom: i == items.length - 1 ? const Radius.circular(12) : Radius.zero,
+                        bottom:
+                            i == items.length - 1
+                                ? const Radius.circular(12)
+                                : Radius.zero,
                       ),
                       child: Container(
-                        key: items[i].keyName != null ? ValueKey(items[i].keyName) : null,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                        key:
+                            items[i].keyName != null
+                                ? ValueKey(items[i].keyName)
+                                : null,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 13,
+                        ),
                         decoration: BoxDecoration(
-                          border: i < items.length - 1 ? Border(bottom: BorderSide(color: context.lineColor)) : null,
+                          border:
+                              i < items.length - 1
+                                  ? Border(
+                                    bottom: BorderSide(
+                                      color: context.lineColor,
+                                    ),
+                                  )
+                                  : null,
                         ),
                         child: Row(
                           children: [
-                            Icon(items[i].icon, size: 18, color: items[i].danger ? M.redMuted : context.mutedColor),
+                            Icon(
+                              items[i].icon,
+                              size: 18,
+                              color:
+                                  items[i].danger
+                                      ? M.redMuted
+                                      : context.mutedColor,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Text(items[i].label,
-                                  style: TextStyle(fontSize: 13, color: items[i].danger ? M.redMuted : null)),
+                              child: Text(
+                                items[i].label,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: items[i].danger ? M.redMuted : null,
+                                ),
+                              ),
                             ),
                             if (items[i].trailing != null)
                               items[i].trailing!
                             else if (!items[i].danger)
-                              Icon(Icons.chevron_right_rounded, size: 18, color: context.mutedColor),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 18,
+                                color: context.mutedColor,
+                              ),
                           ],
                         ),
                       ),

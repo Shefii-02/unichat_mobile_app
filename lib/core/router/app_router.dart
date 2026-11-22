@@ -125,6 +125,9 @@ import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/payroll/payroll_page.dart';
 import 'package:unichat_mobile_app/features/profile/profile_page.dart';
 import 'package:unichat_mobile_app/features/profile/edit_profile_page.dart';
+import 'package:unichat_mobile_app/features/profile/documents_page.dart';
+import 'package:unichat_mobile_app/features/profile/my_leave_page.dart';
+import 'package:unichat_mobile_app/features/profile/help_support_page.dart';
 import 'shell/main_shell.dart';
 
 /// Bridges Riverpod auth + attendance-gate + app-lock state into a GoRouter-compatible
@@ -413,6 +416,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
 
       if (loc == '/splash') return null; // splash routes itself
+      if (loc == '/' || loc == '/hr') return loc == '/hr' ? '/my-leave' : '/home'; // no page lives at these; old links / pushes land somewhere real
       if (auth.isLoading) return null;
 
       final loggedIn = auth.value != null;
@@ -659,6 +663,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/edit-profile',
         builder: (_, __) => const EditProfilePage(),
       ),
+      GoRoute(path: '/my-leave', builder: (_, __) => const MyLeavePage()),
+      GoRoute(path: '/documents', builder: (_, __) => const DocumentsPage()),
+      GoRoute(path: '/help', builder: (_, __) => const HelpSupportPage()),
 
       // One flat route per catalogue module.
       for (final route in moduleRoutes.where((r) => r != '/crm-tasks')) // '/crm-tasks' is a shell tab

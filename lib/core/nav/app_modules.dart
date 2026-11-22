@@ -36,6 +36,7 @@ class AppModule {
     required this.route,
     required this.group,
     this.permission,
+    this.managePermission,
     this.color,
     this.subtitle,
     this.subSections = const [],
@@ -47,6 +48,10 @@ class AppModule {
   final String route;
   final ModuleGroup group;
   final String? permission;
+
+  /// Advanced / team-head tiles: shown only to someone who holds this manage permission, or is a team head (owner, admin, manager,
+  /// team lead). Plain staff keep the basic tiles; they never reach these through the `.view` permission alone.
+  final String? managePermission;
   final Color? color;
   final String? subtitle;
   final List<ModuleSubSection> subSections;
@@ -54,6 +59,9 @@ class AppModule {
   /// Module ids the superadmin hid for the mobile app (web unaffected). Filled by
   /// `mobileHiddenModulesProvider`; routes keep working, only the tiles disappear.
   static Set<String> serverHidden = {};
+
+  /// Tiles this company's admin hid (web: Settings → Mobile App), on top of [serverHidden].
+  static Set<String> companyHidden = {};
 
   /// Backend feature-module key (Modules::REGISTRY) this tile belongs to; `null` = core.
   String? get entitlementModule {
@@ -83,8 +91,10 @@ class AppModule {
   }
 
   bool get visible {
-    if (serverHidden.contains(id)) return false;
+    if (serverHidden.contains(id) || companyHidden.contains(id)) return false;
     if (!PermissionGuard.entitled(entitlementModule)) return false;
+    // Owners / superadmins pass every check inside PermissionGuard.can, so they see all of it (the plan check above still applies).
+    if (managePermission != null && !(PermissionGuard.can(managePermission!) || PermissionGuard.isManager)) return false;
     if (permission == null) return true;
     return PermissionGuard.can(permission!) ||
         PermissionGuard.canView(permission!.split('.').first);
@@ -663,6 +673,7 @@ class AppModules {
       route: '/tasks/dashboard',
       group: ModuleGroup.sales,
       permission: 'contacts.view',
+      managePermission: 'contacts.manage',
       color: Color(0xFFE0475B),
     ),
     AppModule(
@@ -703,6 +714,7 @@ class AppModules {
       route: '/segments',
       group: ModuleGroup.sales,
       permission: 'contacts.view',
+      managePermission: 'contacts.manage',
       color: Color(0xFF8A5CF6),
     ),
     AppModule(
@@ -713,6 +725,7 @@ class AppModules {
       route: '/blacklist',
       group: ModuleGroup.sales,
       permission: 'contacts.view',
+      managePermission: 'contacts.manage',
       color: Color(0xFF5C6570),
     ),
     AppModule(
@@ -733,6 +746,7 @@ class AppModules {
       route: '/lead-categories',
       group: ModuleGroup.sales,
       permission: 'leads.view',
+      managePermission: 'leads.manage',
       color: Color(0xFFDB8A19),
     ),
     AppModule(
@@ -743,6 +757,7 @@ class AppModules {
       route: '/leads-by-staff',
       group: ModuleGroup.sales,
       permission: 'staff.view',
+      managePermission: 'leads.manage',
       color: Color(0xFF0EA5A5),
     ),
     AppModule(
@@ -753,6 +768,7 @@ class AppModules {
       route: '/lead-logs',
       group: ModuleGroup.sales,
       permission: 'leads.view',
+      managePermission: 'leads.manage',
       color: Color(0xFF5C6570),
     ),
     AppModule(
@@ -763,6 +779,7 @@ class AppModules {
       route: '/lead-report',
       group: ModuleGroup.sales,
       permission: 'leads.view',
+      managePermission: 'leads.manage',
       color: Color(0xFF6D5EF0),
     ),
     AppModule(
@@ -773,6 +790,7 @@ class AppModules {
       route: '/assignment-queue',
       group: ModuleGroup.sales,
       permission: 'leads.view',
+      managePermission: 'leads.manage',
       color: Color(0xFFF5871F),
     ),
     AppModule(
@@ -783,6 +801,7 @@ class AppModules {
       route: '/assignment-rules',
       group: ModuleGroup.sales,
       permission: 'lead_assignment.manage',
+      managePermission: 'lead_assignment.manage',
       color: Color(0xFFDB4C6A),
     ),
 
@@ -828,6 +847,7 @@ class AppModules {
       route: '/hr/attendance-all',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF0C447C),
     ),
     AppModule(
@@ -838,6 +858,7 @@ class AppModules {
       route: '/hr/payrolls',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF72243E),
     ),
     AppModule(
@@ -848,6 +869,7 @@ class AppModules {
       route: '/hr/sales',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF27500A),
     ),
     AppModule(
@@ -858,6 +880,7 @@ class AppModules {
       route: '/hr/incentives',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF854F0B),
     ),
     AppModule(
@@ -868,6 +891,7 @@ class AppModules {
       route: '/hr/leave-requests',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF993C1D),
     ),
     AppModule(
@@ -878,6 +902,7 @@ class AppModules {
       route: '/hr/staff-setup',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF3C3489),
     ),
     AppModule(
@@ -888,6 +913,7 @@ class AppModules {
       route: '/hr/break-types',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF5C6570),
     ),
     AppModule(
@@ -898,6 +924,7 @@ class AppModules {
       route: '/hr/leave-types',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF5C6570),
     ),
     AppModule(
@@ -908,6 +935,7 @@ class AppModules {
       route: '/hr/office',
       group: ModuleGroup.hr,
       permission: 'hr.view',
+      managePermission: 'hr.manage',
       color: Color(0xFF5C6570),
     ),
 

@@ -15,20 +15,76 @@ class MediaLibraryPage extends ConsumerStatefulWidget {
   ConsumerState<MediaLibraryPage> createState() => _MediaLibraryPageState();
 }
 
-class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
+/// One paged list of files (a folder's, or everything): pages of [pageSize] are fetched as the user scrolls near the end.
+class _Pager {
+  final items = <Rec>[];
+  int page = 0;
+  bool hasMore = true;
+  bool loading = false;
+  Object? error;
+  void reset() { items.clear(); page = 0; hasMore = true; loading = false; error = null; }
+}
+
+const _pageSize = 30;
+
+class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> with SingleTickerProviderStateMixin {
   List<Rec> _folders = [];
-  List<Rec> _files = [];
   bool _loadingFolders = true;
-  bool _loadingFiles = true;
   Object? _foldersError;
-  Object? _filesError;
-  Rec? _activeFolder;
+  final List<Rec> _path = []; // folders opened in the Folders tab, root → current
+  final _all = _Pager();      // "All files" tab
+  final _inFolder = _Pager(); // files of the folder being viewed
+  final _allScroll = ScrollController();
+  final _folderScroll = ScrollController();
+  late final TabController _tabs = TabController(length: 2, vsync: this);
+
+  Rec? get _activeFolder => _path.isEmpty ? null : _path.last;
 
   @override
   void initState() {
     super.initState();
+    _allScroll.addListener(() => _maybeMore(_allScroll, _all, null));
+    _folderScroll.addListener(() => _maybeMore(_folderScroll, _inFolder, _activeFolder));
+    _tabs.addListener(() { if (mounted) setState(() {}); });
     _loadFolders();
-    _loadFiles();
+    _loadMore(_all, null);
+  }
+
+  @override
+  void dispose() {
+    _allScroll.dispose();
+    _folderScroll.dispose();
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  void _maybeMore(ScrollController c, _Pager pager, Rec? folder) {
+    if (c.hasClients && c.position.pixels >= c.position.maxScrollExtent - 300) _loadMore(pager, folder);
+  }
+
+  Future<void> _loadMore(_Pager pager, Rec? folder) async {
+    if (pager.loading || !pager.hasMore) return;
+    setState(() { pager.loading = true; pager.error = null; });
+    try {
+      final res = await Api.raw.get('/media-library', queryParameters: {
+        'per_page': _pageSize,
+        'page': pager.page + 1,
+        if (folder != null) 'folder_id': folder['id'],
+      });
+      final body = res.data is Map ? res.data as Map : const {};
+      final rows = (body['data'] as List? ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      final meta = body['meta'] is Map ? body['meta'] as Map : const {};
+      if (!mounted) return;
+      setState(() {
+        pager.items.addAll(rows);
+        pager.page = (meta['current_page'] as num?)?.toInt() ?? pager.page + 1;
+        pager.hasMore = pager.page < ((meta['last_page'] as num?)?.toInt() ?? pager.page);
+      });
+    } catch (e) {
+      if (mounted) setState(() { pager.error = e; pager.hasMore = false; });
+    } finally {
+      if (mounted) setState(() => pager.loading = false);
+    }
   }
 
   Future<void> _loadFolders() async {
@@ -41,15 +97,11 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     }
   }
 
+  /// Reload whatever is on screen (used after rename / upload / delete).
   Future<void> _loadFiles() async {
-    setState(() { _loadingFiles = true; _filesError = null; });
-    try {
-      final folderId = _activeFolder?['id'];
-      final files = await Api.list('/media-library', query: folderId != null ? {'folder_id': folderId} : null);
-      if (mounted) setState(() { _files = files; _loadingFiles = false; });
-    } catch (e) {
-      if (mounted) setState(() { _filesError = e; _loadingFiles = false; });
-    }
+    _all.reset();
+    _inFolder.reset();
+    await Future.wait([_loadMore(_all, null), if (_activeFolder != null) _loadMore(_inFolder, _activeFolder)]);
   }
 
   Future<void> _refreshAll() async {
@@ -57,85 +109,128 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
   }
 
   void _openFolder(Rec f) {
-    setState(() => _activeFolder = f);
-    _loadFiles();
+    setState(() { _path.add(f); _inFolder.reset(); });
+    _tabs.animateTo(0);
+    _loadMore(_inFolder, f);
+  }
+
+  void _goUp() {
+    setState(() { _path.removeLast(); _inFolder.reset(); });
+    if (_activeFolder != null) _loadMore(_inFolder, _activeFolder);
   }
 
   void _goToRoot() {
-    setState(() => _activeFolder = null);
-    _loadFiles();
+    setState(() { _path.clear(); _inFolder.reset(); });
+  }
+
+  /// Folders shown now: top-level ones at the root, otherwise the children of the open folder.
+  List<Rec> get _visibleFolders {
+    final pid = _activeFolder?['id'];
+    final list = _folders.where((f) => f['parent_id'] == pid).toList();
+    list.sort((a, b) => str(a['name']).toLowerCase().compareTo(str(b['name']).toLowerCase()));
+    return list;
   }
 
   @override
   Widget build(BuildContext context) {
     final insideFolder = _activeFolder != null;
     return PopScope(
-      canPop: !insideFolder,
+      canPop: !(insideFolder && _tabs.index == 0),
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && insideFolder) _goToRoot();
+        if (!didPop && insideFolder) _goUp();
       },
       child: Scaffold(
         appBar: AppBar(
-          leading: insideFolder ? IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: _goToRoot) : null,
-          title: Text(insideFolder ? str(_activeFolder!['name'], 'Folder') : 'Media Library'),
+          leading: insideFolder && _tabs.index == 0 ? IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: _goUp) : null,
+          title: Text(insideFolder && _tabs.index == 0 ? str(_activeFolder!['name'], 'Folder') : 'Media Library'),
+          bottom: TabBar(controller: _tabs, tabs: const [Tab(text: 'Folders'), Tab(text: 'All files')]),
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: () => _showAddMenu(context),
           child: const Icon(Icons.add_rounded),
         ),
-        body: RefreshIndicator(
-          onRefresh: _refreshAll,
-          child: (_loadingFolders && _folders.isEmpty) || (_loadingFiles && _files.isEmpty)
-              ? ListView(children: const [SizedBox(height: 180), Center(child: CircularProgressIndicator())])
-              : (_foldersError ?? _filesError) != null
-                  ? ListView(padding: const EdgeInsets.all(32), children: [
-                      const SizedBox(height: 100),
-                      const Icon(Icons.error_outline_rounded, size: 48, color: AppPalette.danger),
-                      const SizedBox(height: 12),
-                      Text(apiErrorMessage(_foldersError ?? _filesError ?? 'Something went wrong'), textAlign: TextAlign.center, style: TextStyle(color: context.mutedColor)),
-                      const SizedBox(height: 16),
-                      Center(child: OutlinedButton.icon(onPressed: _refreshAll, icon: const Icon(Icons.refresh_rounded), label: const Text('Retry'))),
-                    ])
-                  : _grid(context, insideFolder),
-        ),
+        body: TabBarView(controller: _tabs, children: [_foldersTab(context), _allFilesTab(context)]),
       ),
     );
   }
 
-  Widget _grid(BuildContext context, bool insideFolder) {
-    final folders = insideFolder ? const <Rec>[] : _folders;
-    if (folders.isEmpty && _files.isEmpty) {
-      return ListView(children: [
-        const SizedBox(height: 140),
-        Icon(insideFolder ? Icons.perm_media_rounded : Icons.folder_open_rounded, size: 56, color: context.mutedColor),
+  Widget _errorView(Object err) => ListView(padding: const EdgeInsets.all(32), children: [
+        const SizedBox(height: 100),
+        const Icon(Icons.error_outline_rounded, size: 48, color: AppPalette.danger),
         const SizedBox(height: 12),
-        Center(child: Text(insideFolder ? 'No files in this folder yet' : 'No media files or folders yet', style: TextStyle(color: context.mutedColor))),
+        Text(apiErrorMessage(err), textAlign: TextAlign.center, style: TextStyle(color: context.mutedColor)),
+        const SizedBox(height: 16),
+        Center(child: OutlinedButton.icon(onPressed: _refreshAll, icon: const Icon(Icons.refresh_rounded), label: const Text('Retry'))),
       ]);
+
+  Widget _emptyView(IconData icon, String text) => ListView(children: [
+        const SizedBox(height: 140),
+        Icon(icon, size: 56, color: context.mutedColor),
+        const SizedBox(height: 12),
+        Center(child: Text(text, style: TextStyle(color: context.mutedColor))),
+      ]);
+
+  /// Folders (and, inside one, its files) — drill down with the back button.
+  Widget _foldersTab(BuildContext context) {
+    if (_loadingFolders && _folders.isEmpty) return ListView(children: const [SizedBox(height: 180), Center(child: CircularProgressIndicator())]);
+    if (_foldersError != null) return RefreshIndicator(onRefresh: _refreshAll, child: _errorView(_foldersError!));
+    final folders = _visibleFolders;
+    final inside = _activeFolder != null;
+    final showFiles = inside;
+    if (folders.isEmpty && (!showFiles || (_inFolder.items.isEmpty && !_inFolder.loading))) {
+      return RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: _emptyView(inside ? Icons.perm_media_rounded : Icons.folder_open_rounded, inside ? 'This folder is empty' : 'No folders yet'),
+      );
     }
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      child: _fileGrid(context, controller: _folderScroll, folders: folders, files: showFiles ? _inFolder.items : const [], pager: showFiles ? _inFolder : null),
+    );
+  }
 
-    final sortedFolders = [...folders]..sort((a, b) => str(a['name']).toLowerCase().compareTo(str(b['name']).toLowerCase()));
-    final sortedFiles = [..._files]..sort((a, b) {
-        final ad = DateTime.tryParse(str(a['created_at'], '')) ?? DateTime(1970);
-        final bd = DateTime.tryParse(str(b['created_at'], '')) ?? DateTime(1970);
-        return bd.compareTo(ad);
-      });
+  /// Every file in the library, newest first, loaded a page at a time.
+  Widget _allFilesTab(BuildContext context) {
+    if (_all.error != null && _all.items.isEmpty) return RefreshIndicator(onRefresh: _refreshAll, child: _errorView(_all.error!));
+    if (_all.loading && _all.items.isEmpty) return ListView(children: const [SizedBox(height: 180), Center(child: CircularProgressIndicator())]);
+    if (_all.items.isEmpty) return RefreshIndicator(onRefresh: _refreshAll, child: _emptyView(Icons.perm_media_rounded, 'No media files yet'));
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      child: _fileGrid(context, controller: _allScroll, folders: const [], files: _all.items, pager: _all),
+    );
+  }
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
+  Widget _fileGrid(BuildContext context, {required ScrollController controller, required List<Rec> folders, required List<Rec> files, required _Pager? pager}) {
+    return CustomScrollView(
+      controller: controller,
       physics: const AlwaysScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 130,
-        mainAxisSpacing: 14,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.8,
-      ),
-      itemCount: sortedFolders.length + sortedFiles.length,
-      itemBuilder: (context, i) {
-        if (i < sortedFolders.length) {
-          return _folderTile(context, sortedFolders[i]);
-        }
-        return _fileTile(context, sortedFiles[i - sortedFolders.length]);
-      },
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 130, mainAxisSpacing: 14, crossAxisSpacing: 12, childAspectRatio: 0.8),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => i < folders.length ? _folderTile(context, folders[i]) : _fileTile(context, files[i - folders.length]),
+              childCount: folders.length + files.length,
+            ),
+          ),
+        ),
+        if (pager != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: Center(
+                child: pager.loading
+                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                    : pager.error != null
+                        ? TextButton.icon(
+                            onPressed: () { pager.hasMore = true; _loadMore(pager, identical(pager, _all) ? null : _activeFolder); },
+                            icon: const Icon(Icons.refresh_rounded), label: const Text('Couldn\'t load more — retry'))
+                        : pager.hasMore ? const SizedBox.shrink() : (files.isNotEmpty ? Text('${files.length} files', style: TextStyle(fontSize: 11, color: context.mutedColor)) : const SizedBox.shrink()),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -271,7 +366,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                 }
                 final ok = await runAction(context, () => Api.delete('/media-library/folders/${f['id']}'), success: 'Deleted');
                 if (ok) {
-                  if (_activeFolder?['id'] == f['id']) _activeFolder = null;
+                  if (_path.any((p) => p['id'] == f['id'])) _goToRoot();
                   _refreshAll();
                 }
               },

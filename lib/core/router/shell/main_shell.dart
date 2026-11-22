@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/nav/hidden_modules_provider.dart';
+import 'package:unichat_mobile_app/core/nav/mobile_config_provider.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_data.dart';
 import 'package:unichat_mobile_app/services/push_service.dart';
@@ -32,6 +33,11 @@ class MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(mobileHiddenModulesProvider); // loads the superadmin's hidden-tile list
+    final cfg = ref.watch(mobileConfigProvider).maybeWhen(data: (c) => c, orElse: () => const MobileConfig());
+    // Home and Profile always stay; the company can switch the rest off.
+    const keyOf = {1: 'todo', 2: 'chats', 3: 'explore', 4: 'attendance', 5: 'payroll'};
+    final tabs = [for (final t in _tabs) if (keyOf[t.branch] == null || cfg.tab(keyOf[t.branch]!)) t];
+    final exploreSlot = tabs.indexWhere((t) => t.raised);
     if (PermissionGuard.teamChatEnabled) ref.watch(teamChatRealtimeProvider); // keeps the staff socket up + refreshes chats on events
     final chatUnread = PermissionGuard.teamChatEnabled ? ref.watch(teamUnreadProvider) : 0;
     PushService.instance.onOpenTeamChat = (id) => context.push('/team-chat/$id');
@@ -58,7 +64,7 @@ class MainShell extends ConsumerWidget {
               child: Padding(
                 padding: EdgeInsets.only(bottom: bottomInset),
                 child: Row(children: [
-                  for (final t in _tabs)
+                  for (final t in tabs)
                     Expanded(
                       child: t.raised
                           ? const SizedBox.shrink()
@@ -73,12 +79,17 @@ class MainShell extends ConsumerWidget {
               ),
             ),
           ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Center(child: _raised(theme, _tabs[3], idx == 3, () => navigationShell.goBranch(3, initialLocation: idx == 3))),
-          ),
+          if (exploreSlot >= 0)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              // sits over the Explore slot, wherever hidden tabs leave it
+              child: Align(
+                alignment: Alignment(2 * (exploreSlot + 0.5) / tabs.length - 1, 0),
+                child: _raised(theme, _tabs[3], idx == 3, () => navigationShell.goBranch(3, initialLocation: idx == 3)),
+              ),
+            ),
         ]),
       ),
     );
