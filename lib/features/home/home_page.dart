@@ -15,6 +15,8 @@ import 'package:unichat_mobile_app/features/home/stats_charts.dart';
 import 'package:unichat_mobile_app/features/home/team_reports.dart';
 import 'package:unichat_mobile_app/features/home/wa_cloud_home.dart';
 import 'package:unichat_mobile_app/core/constants/api_constants.dart';
+import 'package:unichat_mobile_app/features/workspace/workspace_provider.dart';
+import 'package:unichat_mobile_app/features/workspace_home/workspace_home.dart';
 
 /// Day-to-day CRM/HRMS dashboard: sales target, attendance (clock in/out,
 /// breaks), personal stats (new leads / follow-ups / streak / rank), pipeline,
@@ -38,10 +40,40 @@ class HomePage extends ConsumerWidget {
     final theme = Theme.of(context);
     final user = ref.watch(authProvider).value;
     final hr = PermissionGuard.entitled('hr');
+    // Another workspace (Sales / Administrators / HR / Marketing / Accounts): the same Home frame — header, clock-in — with that workspace's own sections.
+    final wsBody = workspaceBodyFor(ref.watch(activeWorkspaceProvider));
+    if (wsBody != null) {
+      return Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: StickyOverlay(
+          child: SafeArea(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(wsHomeProvider);
+                ref.invalidate(wsAccountsProvider);
+                ref.invalidate(wsReceivableProvider);
+                ref.invalidate(dashboardMeProvider);
+                ref.invalidate(hrAttendanceMeProvider);
+              },
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 32),
+                children: [
+                  const _HeroHeader(),
+                  wsBody,   // starts with the summary under the header, then the clock-in card (WsAttendance), then the workspace's sections
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final leadsOn = PermissionGuard.entitled('leads');
     // Home blocks follow the user's access sections (main + subs). Company Admin / owner /
     // superadmin see every block; an account with no sections falls back to permissions only.
-    final sections = user?.accessSections ?? const <String>[];
+    // The workspace picked in the header dropdown narrows Home to that section; Company Admin keeps every block the user has.
+    final active = ref.watch(activeWorkspaceProvider);
+    final allSections = user?.accessSections ?? const <String>[];
+    final sections = (active == null || active == 'company_admin') ? allSections : <String>[active];
     final isAdmin = user == null ||
         sections.contains('company_admin') ||
         user.role == 'superadmin' ||
@@ -291,6 +323,7 @@ class _HeroHeader extends ConsumerWidget {
                   ],
                 ),
               ),
+              const _WorkspaceDropdown(),
               _HeroIconButton(
                 icon: Icons.notifications_none_rounded,
                 showDot: true,
@@ -373,6 +406,53 @@ class _HeroHeader extends ConsumerWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Header dropdown (after the greeting + name, before the bell): the workspaces this user is allowed — main section plus sub sections —
+/// so one person can view Home as Administrators, Sales, Marketing, HR or Accounts. Hidden when they only have one.
+class _WorkspaceDropdown extends ConsumerWidget {
+  const _WorkspaceDropdown();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider).value;
+    final spaces = workspacesFor(user);
+    if (spaces.length < 2) return const SizedBox.shrink();
+    final activeKey = ref.watch(activeWorkspaceProvider);
+    final current = spaces.firstWhere((w) => w.key == activeKey, orElse: () => spaces.first);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: PopupMenuButton<String>(
+        tooltip: 'Switch workspace',
+        position: PopupMenuPosition.under,
+        onSelected: (k) => ref.read(activeWorkspaceProvider.notifier).choose(k),
+        itemBuilder: (_) => [
+          for (final w in spaces)
+            PopupMenuItem<String>(
+              value: w.key,
+              child: Row(children: [
+                Icon(w.icon, size: 18, color: w.key == current.key ? Theme.of(context).colorScheme.primary : null),
+                const SizedBox(width: 10),
+                Expanded(child: Text(w.title, style: TextStyle(fontWeight: w.key == current.key ? FontWeight.w700 : FontWeight.w500))),
+                if (w.key == spaces.first.key) const Text('Main', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                if (w.key == current.key) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.check_rounded, size: 16)),
+              ]),
+            ),
+        ],
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 118),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(99)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600))),
+            const SizedBox(width: 2),
+            const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Colors.white),
+          ]),
+        ),
       ),
     );
   }

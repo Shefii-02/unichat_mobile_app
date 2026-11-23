@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/nav/hidden_modules_provider.dart';
+import 'package:unichat_mobile_app/features/quick_access/quick_access_sheet.dart';
 import 'package:unichat_mobile_app/core/nav/mobile_config_provider.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_data.dart';
@@ -24,7 +25,7 @@ class MainShell extends ConsumerWidget {
     _Tab(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
     _Tab(1, Icons.checklist_rounded, Icons.checklist_rounded, 'Todo'),
     _Tab(2, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chats'),
-    _Tab(3, Icons.explore_outlined, Icons.explore_rounded, 'Explore', raised: true),
+    _Tab(3, Icons.apps_rounded, Icons.apps_rounded, 'Quick', raised: true),
     _Tab(4, Icons.fingerprint_outlined, Icons.fingerprint_rounded, 'Attendance'),
     _Tab(5, Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Payroll'),
     _Tab(6, Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
@@ -87,7 +88,8 @@ class MainShell extends ConsumerWidget {
               // sits over the Explore slot, wherever hidden tabs leave it
               child: Align(
                 alignment: Alignment(2 * (exploreSlot + 0.5) / tabs.length - 1, 0),
-                child: _raised(theme, _tabs[3], idx == 3, () => navigationShell.goBranch(3, initialLocation: idx == 3)),
+                // Opens Quick access (round icon links for the current workspace); its "More" goes to the full Explore list.
+                child: _raised(theme, _tabs[3], idx == 3, () => showQuickAccessSheet(context, ref, onMore: () => navigationShell.goBranch(3, initialLocation: idx == 3))),
               ),
             ),
         ]),
