@@ -441,6 +441,17 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
     }
   }
 
+  /// Take the chat (the assistant stops answering) and stay on this screen with the reply box open.
+  Future<void> _start() async {
+    try {
+      await DioClient.chatDio.post('$_node/${widget.id}/accept');
+      _fetch();
+    } catch (e) {
+      if (mounted) _snack(apiErrorMessage(e));
+      _fetch();
+    }
+  }
+
   bool get _isClosed => _convo['status'] == 'closed' || _convo['live_status'] == 'ended';
 
   /// Close any chat (a live one is ended for the visitor too); it stays under Closed and can be reopened.
@@ -609,6 +620,28 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
             },
           ),
         ),
+        // not live (the assistant has it, or it was closed): staff can start the chat whenever they want
+        if (!live && _convo.isNotEmpty)
+          SafeArea(
+            top: false,
+            child: Container(
+              color: Colors.lightBlue.withValues(alpha: 0.10),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    _convo['status'] == 'closed' || _convo['live_status'] == 'ended'
+                        ? 'This chat is closed — start it again to talk to the visitor.'
+                        : _convo['live_status'] == 'waiting' || _convo['live_status'] == 'missed'
+                            ? 'The visitor is waiting for a person.'
+                            : 'The assistant is handling this chat.',
+                    style: const TextStyle(fontSize: 12.5),
+                  ),
+                ),
+                FilledButton(onPressed: _start, child: Text(_convo['status'] == 'closed' || _convo['live_status'] == 'ended' ? 'Reopen & start' : 'Start chat')),
+              ]),
+            ),
+          ),
         if (live) ...[
           if (_replyTo != null)
             Container(

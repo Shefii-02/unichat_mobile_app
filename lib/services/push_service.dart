@@ -104,6 +104,11 @@ class PushService {
 
   void _handleTap(RemoteMessage m) {
     if (_handleLead(m)) return;
+    if (m.data['action'] == 'open_widget_chat') {
+      final cid = int.tryParse('${m.data['widget_conversation_id']}');
+      _goRoute(cid != null ? '/wa-agent/widget-chats?c=$cid' : '/wa-agent/widget-chats');
+      return;
+    }
     if (m.data['action'] != 'open_team_chat') {
       _goRoute(_routeFor['${m.data['action']}'] ?? '/notifications');   // never a dead tap
       return;
