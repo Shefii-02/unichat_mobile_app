@@ -55,6 +55,33 @@ class _NotificationsPageState extends State<NotificationsPage> {
     } catch (_) {}
   }
 
+  /// Removes every notification in the open tab (after asking), or just one when swiped.
+  Future<void> _clear({int? only}) async {
+    if (only == null) {
+      final label = switch (_tab) { 'lead' => 'lead notifications', 'other' => 'other notifications', _ => 'notifications' };
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text('Clear all $label?'),
+          content: const Text('They are removed from your list. This cannot be undone.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      await Api.post('/notifications/clear', data: only != null ? {'ids': [only]} : {'category': _tab});
+      _refreshBadge();
+      if (only == null) await _load();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not clear. Try again.')));
+      _load();
+    }
+  }
+
   Future<void> _open(Map<String, dynamic> n) async {
     final id = (n['id'] as num?)?.toInt();
     if (n['read_at'] == null && id != null) {
@@ -91,6 +118,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Notifications'), actions: [
         IconButton(icon: const Icon(Icons.done_all), onPressed: _unread > 0 ? _markAll : null, tooltip: 'Mark all read'),
+        IconButton(icon: const Icon(Icons.delete_sweep_outlined), onPressed: _items.isNotEmpty ? () => _clear() : null, tooltip: 'Clear all'),
       ]),
       body: Column(children: [
         Padding(
@@ -125,14 +153,23 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           final n = _items[i];
                           final read = n['read_at'] != null;
                           final ts = n['created_at'] != null ? DateTime.tryParse('${n['created_at']}') : null;
-                          return ListTile(
+                          return Dismissible(
+                            key: ValueKey('n${n['id']}'),
+                            direction: DismissDirection.endToStart,
+                            background: Container(color: Colors.red.shade400, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete_outline, color: Colors.white)),
+                            onDismissed: (_) {
+                              final id = (n['id'] as num).toInt();
+                              setState(() => _items.removeWhere((x) => x['id'] == n['id']));
+                              _clear(only: id);   // swipe left to remove one
+                            },
+                            child: ListTile(
                             leading: Text(_icon('${n['category']}'), style: const TextStyle(fontSize: 26)),
                             title: Text('${n['title'] ?? ''}', style: TextStyle(fontWeight: read ? FontWeight.normal : FontWeight.w700)),
                             subtitle: Text([if ((n['message'] ?? '').toString().isNotEmpty) '${n['message']}', FormatUtils.relative(ts)].join('\n')),
                             isThreeLine: (n['message'] ?? '').toString().isNotEmpty,
                             tileColor: read ? null : AppColors.primary.withAlpha(8),
                             onTap: () => _open(n),
-                          );
+                          ));
                         },
                       ),
                     ),
