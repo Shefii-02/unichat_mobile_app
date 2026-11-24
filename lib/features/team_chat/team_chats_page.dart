@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/network/api.dart';
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_data.dart';
+import 'package:unichat_mobile_app/features/team_chat/team_api.dart';
 
 /// Avatar for a person or group: photo if present, else coloured initial / group icon.
 class ChatAvatar extends StatelessWidget {
@@ -344,6 +345,16 @@ class _TeamChatsPageState extends ConsumerState<TeamChatsPage> {
     ref.read(teamChatsProvider.notifier).refresh();
   }
 
+  Future<void> _openAtMention(BuildContext context, int chatId) async {
+    int? msg;
+    try {
+      final mine = await TeamApi.list('/team-chat/mentions');
+      final ids = [for (final x in mine) if ((x['chat_id'] as num?)?.toInt() == chatId && x['unread'] == true) (x['id'] as num).toInt()]..sort();
+      if (ids.isNotEmpty) msg = ids.first;
+    } catch (_) {}
+    if (context.mounted) context.push('/team-chat/$chatId${msg != null ? '?m=$msg' : ''}');
+  }
+
   Widget _tile(BuildContext context, Map c) {
     final id = (c['id'] as num).toInt();
     final unread = (c['unread'] as num?)?.toInt() ?? 0;
@@ -410,24 +421,21 @@ class _TeamChatsPageState extends ConsumerState<TeamChatsPage> {
                           style: TextStyle(color: unread > 0 ? Glass.text(context) : Glass.muted(context), fontWeight: unread > 0 ? FontWeight.w600 : FontWeight.w400, fontSize: 13.5),
                         ),
                       ),
-                      if (mentions > 0)
-                        Container(
-                          margin: const EdgeInsets.only(left: 6),
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Glass.accentDeep, shape: BoxShape.circle),
-                          child: const Icon(Icons.alternate_email_rounded, size: 12, color: Colors.white),
-                        ),
                       if (unread > 0)
-                        Container(
+                        GestureDetector(
+                          // "@ 5": tapping it opens the chat right at the first unread message that mentions me
+                          onTap: mentions > 0 ? () => _openAtMention(context, id) : null,
+                          child: Container(
                           margin: const EdgeInsets.only(left: 6),
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                           decoration: BoxDecoration(
-                            gradient: muted ? null : const LinearGradient(colors: [Glass.accentSoft, Glass.accent]),
-                            color: muted ? Glass.muted(context) : null,
+                            // someone @mentioned you in here: one clear badge — "@ 5" = 5 unread, and some of them are for you
+                            gradient: muted || mentions > 0 ? null : const LinearGradient(colors: [Glass.accentSoft, Glass.accent]),
+                            color: mentions > 0 ? Glass.accentDeep : (muted ? Glass.muted(context) : null),
                             borderRadius: BorderRadius.circular(99),
                           ),
-                          child: Text(unread > 99 ? '99+' : '$unread', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
-                        ),
+                          child: Text('${mentions > 0 ? '@ ' : ''}${unread > 99 ? '99+' : unread}', style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
+                        )),
                     ]),
                   ]),
                 ),

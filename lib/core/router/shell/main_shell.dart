@@ -10,6 +10,7 @@ import 'package:unichat_mobile_app/core/nav/mobile_config_provider.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_data.dart';
 import 'package:unichat_mobile_app/services/push_service.dart';
+import 'package:unichat_mobile_app/features/leads/presentation/widgets/lead_offer_dialog.dart';
 
 /// The one persistent bottom-nav frame. Wraps a [StatefulNavigationShell] (see
 /// `StatefulShellRoute.indexedStack` in app_router.dart) — each tab keeps its own Navigator
@@ -62,7 +63,10 @@ class MainShell extends ConsumerWidget {
     final exploreSlot = tabs.indexWhere((t) => t.raised);
     if (PermissionGuard.teamChatEnabled) ref.watch(teamChatRealtimeProvider); // keeps the staff socket up + refreshes chats on events
     final chatUnread = PermissionGuard.teamChatEnabled ? ref.watch(teamUnreadProvider) : 0;
-    PushService.instance.onOpenTeamChat = (id) => context.push('/team-chat/$id');
+    PushService.instance.onOpenTeamChat = (id, mid) => context.push('/team-chat/$id${mid != null ? '?m=$mid' : ''}');
+    PushService.instance.onLeadOffer = (d) => showLeadOfferDialog(context, d);
+    PushService.instance.onOpenLead = (id) => context.push('/lead-detail/$id');
+    PushService.instance.onOpenRoute = (r) => r == '/leads' ? context.go(r) : context.push(r);   // Leads is a bottom-bar tab: switch to it, don't stack a second shell
     final idx = navigationShell.currentIndex;
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.of(context).padding.bottom;

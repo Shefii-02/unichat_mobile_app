@@ -325,7 +325,7 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
     case '/wa-agent/logs':
       return const WaAgentLogsPage();
     case '/wa-agent/widget-chats':
-      return const WidgetChatsPage();
+      return WidgetChatsPage(openId: int.tryParse(state.uri.queryParameters['c'] ?? ''));
     case '/wa-agent/lead-intelligence':
       return const LeadIntelligencePage();
     case '/wa-agent/ai-config':

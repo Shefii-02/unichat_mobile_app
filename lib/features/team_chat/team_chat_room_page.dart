@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:unichat_mobile_app/features/team_chat/delete_group_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:unichat_mobile_app/services/push_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -59,6 +60,8 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
   int _newWhileAway = 0;
   int _tempSeq = 0;
   int? _highlight;
+  // unread messages that @mention me, captured BEFORE the chat is marked read — the "@ N" chip walks through them
+  List<int> _mentionQueue = [];
   // find-in-chat
   bool _finding = false;
   final _findCtrl = TextEditingController();
@@ -153,14 +156,21 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
     _recorder.dispose();
     SocketService().emitTeamTyping(widget.chatId, false);
     _input.dispose();
+    if (PushService.instance.openChatId == widget.chatId) PushService.instance.openChatId = null;
     _scroll.dispose();
     _focus.dispose();
     super.dispose();
   }
 
   Future<void> _init() async {
+    PushService.instance.openChatId = widget.chatId;
     try {
       _info = await TeamApi.one('/team-chat/chats/${widget.chatId}');
+      try {
+        final mine = await TeamApi.list('/team-chat/mentions');
+        final q = [for (final x in mine) if ((x['chat_id'] as num?)?.toInt() == widget.chatId && x['unread'] == true) (x['id'] as num).toInt()]..sort();
+        if (mounted) setState(() => _mentionQueue = q.where((id) => id != widget.jumpToMessageId).toList());
+      } catch (_) {/* the chip just stays hidden */}
       if (widget.jumpToMessageId != null) {
         await _jumpTo(widget.jumpToMessageId!, initial: true);
       } else {
@@ -323,8 +333,18 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
 
   // ── sending ──────────────────────────────────────────────────────────────
 
-  List<int> _activeMentions(String text) =>
-      [for (final e in _mentionIds.entries) if (text.contains('@${e.value}')) e.key];
+  List<int> _activeMentions(String text) {
+    // every member written as "@Name" (typed by hand or picked) — followed by anything that is not part of a word
+    final ids = <int>{
+      for (final e in {..._memberNames, ..._mentionIds}.entries)
+        if (e.key != _me && RegExp('(^|\\s)@${RegExp.escape(e.value)}(?![\\p{L}\\p{N}])', caseSensitive: false, unicode: true).hasMatch(text)) e.key,
+    };
+    // "@all" mentions every other member of the group (the server keeps only real members)
+    if (_group && RegExp(r'(^|\s)@all(?![A-Za-z0-9])', caseSensitive: false).hasMatch(text)) {
+      ids.addAll(_memberNames.keys.where((k) => k != _me));
+    }
+    return ids.toList();
+  }
 
   Future<void> _sendText() async {
     final text = _input.text.trim();
@@ -423,6 +443,14 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
   void _stopTyping() {
     _lastTypingEmit = DateTime.fromMillisecondsSinceEpoch(0);
     SocketService().emitTeamTyping(widget.chatId, false);
+  }
+
+  void _pickAll() {
+    final t = _input.text;
+    final i = t.lastIndexOf('@');
+    final next = '${t.substring(0, i)}@all ';
+    _input.value = TextEditingValue(text: next, selection: TextSelection.collapsed(offset: next.length));
+    setState(() => _mentionQuery = null);
   }
 
   void _pickMention(int id, String name) {
@@ -859,6 +887,23 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
             Expanded(
               child: Stack(children: [
                 _body(theme),
+                // "@ 2 mentions": jumps to the next unread message that mentions me
+                if (_mentionQueue.isNotEmpty)
+                  Positioned(
+                    right: 14,
+                    bottom: 64,
+                    child: ActionChip(
+                      backgroundColor: Glass.accentDeep,
+                      side: BorderSide.none,
+                      avatar: const Icon(Icons.alternate_email_rounded, size: 16, color: Colors.white),
+                      label: Text('${_mentionQueue.length} mention${_mentionQueue.length > 1 ? 's' : ''}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                      onPressed: () {
+                        final next = _mentionQueue.first;
+                        setState(() => _mentionQueue = _mentionQueue.sublist(1));
+                        _jumpTo(next);
+                      },
+                    ),
+                  ),
                 // Jump-to-latest button (shows when scrolled up; counts new messages that arrived meanwhile).
                 Positioned(
                   right: 14,
@@ -1047,11 +1092,20 @@ class _TeamChatRoomPageState extends ConsumerState<TeamChatRoomPage> {
         .where((e) => e.key != me && (_mentionQuery!.isEmpty || e.value.toLowerCase().contains(_mentionQuery!)))
         .take(5)
         .toList();
-    if (list.isEmpty) return const SizedBox.shrink();
+    final showAll = _group && 'all'.startsWith(_mentionQuery!);
+    if (list.isEmpty && !showAll) return const SizedBox.shrink();
     return Container(
       constraints: const BoxConstraints(maxHeight: 220),
       decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, border: Border(top: BorderSide(color: context.lineColor))),
       child: ListView(shrinkWrap: true, children: [
+        if (showAll)
+          ListTile(
+            dense: true,
+            leading: const CircleAvatar(radius: 14, child: Icon(Icons.alternate_email_rounded, size: 16)),
+            title: const Text('@all'),
+            subtitle: Text('Notify everyone in this group (${(_memberNames.length - 1).clamp(0, 9999)})'),
+            onTap: _pickAll,
+          ),
         for (final e in list)
           ListTile(dense: true, leading: ChatAvatar(name: e.value, radius: 14), title: Text('@${e.value}'), onTap: () => _pickMention(e.key, e.value)),
       ]),
@@ -1425,6 +1479,7 @@ class _MessageBubble extends StatelessWidget {
       for (final id in (m['mentions'] as List? ?? const [])) if (names[(id as num).toInt()] != null) names[id.toInt()]!,
     ];
     final style = const TextStyle(fontSize: 14.5, height: 1.3);
+    if (RegExp(r'(^|\s)@all(?![A-Za-z0-9])', caseSensitive: false).hasMatch(body)) mentionNames.add('all');
     if (mentionNames.isEmpty) return Text(body, style: style);
     final re = RegExp('@(${mentionNames.map(RegExp.escape).join('|')})');
     final spans = <TextSpan>[];

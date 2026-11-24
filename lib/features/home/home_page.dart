@@ -2,6 +2,7 @@ import 'package:unichat_mobile_app/core/network/api.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:unichat_mobile_app/features/notifications/notification_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/features/attendance/widgets/attendance_status_card.dart';
@@ -324,11 +325,11 @@ class _HeroHeader extends ConsumerWidget {
                 ),
               ),
               const _WorkspaceDropdown(),
-              _HeroIconButton(
+              Consumer(builder: (context, ref, _) => _HeroIconButton(
                 icon: Icons.notifications_none_rounded,
-                showDot: true,
-                onTap: () => context.push('/notifications'),
-              ),
+                showDot: (ref.watch(notificationBadgeProvider).value ?? 0) > 0,   // a dot only when something is really unread
+                onTap: () => context.push('/notifications').then((_) => ref.invalidate(notificationBadgeProvider)),
+              )),
               const SizedBox(width: 10),
               // _HeroIconButton(
               //   icon: Icons.grid_view_rounded,

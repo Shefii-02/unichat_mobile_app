@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:unichat_mobile_app/core/network/dio_client.dart';
+import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/core/socket/socket_service.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
@@ -24,7 +25,9 @@ const _maxBytes = 2 * 1024 * 1024; // chat files are capped at 2 MB (also enforc
 const _emojis = ['😀', '😁', '😂', '🤣', '😊', '😍', '😘', '😎', '🤔', '😢', '😭', '😡', '👍', '👎', '👏', '🙏', '🙌', '💪', '🎉', '🔥', '❤️', '💯', '✅', '❌', '👋', '🤝', '😅', '😉', '🙂', '😇'];
 
 class WidgetChatsPage extends StatefulWidget {
-  const WidgetChatsPage({super.key});
+  const WidgetChatsPage({super.key, this.openId});
+  /// Open this one chat straight away (from the "take over" offer).
+  final int? openId;
   @override
   State<WidgetChatsPage> createState() => _WidgetChatsPageState();
 }
@@ -54,6 +57,11 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
   void initState() {
     super.initState();
     _load();
+    if (widget.openId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).push(MaterialPageRoute(builder: (_) => _WidgetChatDetailPage(id: widget.openId!, title: 'Visitor')));
+      });
+    }
     // Realtime: any change pushed by the server → refresh the list (debounced). Reconnect → resync.
     _wsSub = SocketService().widgetChatUpdates.listen((_) {
       _pushDebounce?.cancel();
@@ -433,6 +441,43 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
     }
   }
 
+  bool get _isClosed => _convo['status'] == 'closed' || _convo['live_status'] == 'ended';
+
+  /// Close any chat (a live one is ended for the visitor too); it stays under Closed and can be reopened.
+  Future<void> _close() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Close this chat?'),
+        content: const Text('It moves to Closed and can be reopened later.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Close chat')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      if (_convo['live_status'] == 'live') {
+        await DioClient.chatDio.post('$_node/${widget.id}/end');
+      } else {
+        await Api.post('/widgets/live/${widget.id}/close');
+      }
+      _fetch();
+    } catch (e) {
+      if (mounted) _snack(apiErrorMessage(e));
+    }
+  }
+
+  Future<void> _reopen() async {
+    try {
+      await Api.post('/widgets/live/${widget.id}/reopen');
+      _fetch();
+    } catch (e) {
+      if (mounted) _snack(apiErrorMessage(e));
+    }
+  }
+
   Future<void> _flag() async {
     try {
       await Api.raw.post('/widgets/live/${widget.id}/flag');
@@ -521,10 +566,13 @@ class _WidgetChatDetailPageState extends State<_WidgetChatDetailPage> {
         actions: [
           if (live) TextButton(onPressed: _end, child: const Text('End chat')),
           PopupMenuButton<String>(
-            onSelected: (v) { if (v == 'delete') _delete(); if (v == 'flag') _flag(); },
+            onSelected: (v) { if (v == 'delete') _delete(); if (v == 'flag') _flag(); if (v == 'close') _close(); if (v == 'reopen') _reopen(); },
             itemBuilder: (_) => [
+              if (_convo.isNotEmpty && !_isClosed) const PopupMenuItem(value: 'close', child: Text('✅ Close chat')),
+              if (_convo.isNotEmpty && _isClosed) const PopupMenuItem(value: 'reopen', child: Text('↩ Reopen chat')),
               if (_convo['flagged_at'] == null) const PopupMenuItem(value: 'flag', child: Text('🚩 Not satisfied')),
-              const PopupMenuItem(value: 'delete', child: Text('Delete conversation')),
+              // deleting a chat and its files is for admins only (the owner, or anyone given "Delete Website Chat Conversations")
+              if (PermissionGuard.can('widget_chat.delete')) const PopupMenuItem(value: 'delete', child: Text('Delete conversation')),
             ],
           ),
         ],
