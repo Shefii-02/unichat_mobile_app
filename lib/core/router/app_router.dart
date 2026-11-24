@@ -89,6 +89,8 @@ import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/blackli
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_categories_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/leads_by_staff_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_logs_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_review_page.dart';
+import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_sources_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/lead_report_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/assignment_queue_page.dart';
 import 'package:unichat_mobile_app/features/crm_sales/presentation/pages/assignment_rules_page.dart';
@@ -279,6 +281,10 @@ Widget _pageForModuleRoute(String route, GoRouterState state) {
       return const LeadsByStaffPage();
     case '/lead-logs':
       return const LeadLogsPage();
+    case '/lead-review':
+      return const LeadReviewPage();
+    case '/lead-sources':
+      return const LeadSourcesPage();
     case '/lead-summary':
       return const LeadSummaryPage();
     case '/lead-report':
@@ -596,6 +602,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                     ContactDetailPage(id: int.parse(s.pathParameters['id']!)),
           ),
         ],
+      ),
+      // One source's leads (from Lead sources) — the normal Leads list, filtered
+      GoRoute(
+        path: '/leads-by-source/:source',
+        builder: (_, s) => LeadsPage(source: s.pathParameters['source'], title: s.uri.queryParameters['name']),
       ),
       GoRoute(
         path: '/leads-by-staff',

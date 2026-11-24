@@ -93,6 +93,7 @@ class SettingsPage extends ConsumerWidget {
           ]),
 
           _section('About', [
+            const _AutoUpdateTile(),
             const _VersionTile(),
             _tile(Icons.support_agent, 'Support', subtitle: _supportEmail,
                 trailing: const Icon(Icons.chevron_right),
@@ -526,6 +527,33 @@ class _BiometricTile extends ConsumerWidget {
                 },
         ),
       ),
+    );
+  }
+}
+
+/// Profile → Settings → Auto update. On (default): when a new version is on the Play Store the app downloads it in the background when it
+/// opens and asks to restart. Off: the app just asks. (iOS updates go through the App Store, so there it only reminds.)
+class _AutoUpdateTile extends StatefulWidget {
+  const _AutoUpdateTile();
+  @override
+  State<_AutoUpdateTile> createState() => _AutoUpdateTileState();
+}
+
+class _AutoUpdateTileState extends State<_AutoUpdateTile> {
+  bool _on = UpdateChecker.autoUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.system_update_alt_rounded, color: AppColors.textSecondary, size: 22),
+      title: const Text('Auto update', style: TextStyle(fontSize: 14)),
+      subtitle: const Text('Download new versions in the background when the app opens, then ask you to restart. iPhone updates come from the App Store.',
+          style: TextStyle(fontSize: 11.5, color: AppColors.textLight)),
+      value: _on,
+      onChanged: (v) async {
+        setState(() => _on = v);
+        await UpdateChecker.setAutoUpdate(v);
+      },
     );
   }
 }

@@ -59,15 +59,31 @@ class WsAttendance extends StatelessWidget {
   Widget build(BuildContext context) => PermissionGuard.entitled('hr') ? const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 0), child: AttendanceStatusCard()) : const SizedBox.shrink();
 }
 
+/// True when the signed-in user holds ANY of [perms] (owners / superadmins always do) — or no permission is required.
+bool wsAllowed(List<String>? perms) => perms == null || perms.isEmpty || perms.any(PermissionGuard.can);
+
+/// Permission(s) behind each stat tile (by its label), so every tile shows only for someone whose role / sections / extras allow it.
+const _tilePerms = <String, List<String>>{
+  'Leads': ['leads.view'], 'My leads': ['leads.view'], 'New leads': ['leads.view'], 'Contacts': ['contacts.view'], 'Follow-ups': ['contacts.view'],
+  'Chats': ['wa_chat.chats.view', 'inbox.view'],
+  'Leave': ['hr.leave.approve', 'hr.manage'], 'Payroll': ['hr.manage'], 'Directory': ['staff.view'],
+  'Staff': ['staff.view'], 'Roles': ['roles.view'], 'Devices': ['devices.view'], 'Integrations': ['integrations.view'],
+  'Campaigns': ['campaigns.view', 'meta_ads.view'], 'Templates': ['templates.view'], 'Flows': ['flow_builder.view', 'instagram.view'], 'Social & ads': ['instagram.view', 'meta_ads.view'],
+  'Books': ['accounts.read'], 'Receivable': ['accounts.read'], 'Payable': ['accounts.read'], 'Wallet': ['wallet.view'],
+};
+
 /// A titled block: the same plain header + "View all" link the Company Admin Home uses.
 class WsSection extends StatelessWidget {
-  const WsSection({super.key, required this.title, required this.child, this.action, this.onAction});
+  const WsSection({super.key, required this.title, required this.child, this.action, this.onAction, this.perms});
   final String title;
+
+  /// Hidden unless the user holds one of these permissions.
+  final List<String>? perms;
   final Widget child;
   final String? action;
   final VoidCallback? onAction;
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) => !wsAllowed(perms) ? const SizedBox.shrink() : Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           SectionHeader(title, action: action == null ? null : TextButton(onPressed: onAction, child: Text(action!))),
@@ -139,11 +155,13 @@ class WsTiles extends StatelessWidget {
   final List<WsTile> items;
   @override
   Widget build(BuildContext context) {
+    final shown = [for (final t in items) if (wsAllowed(_tilePerms[t.$1])) t];
+    if (shown.isEmpty) return const SizedBox.shrink();
     final w = (MediaQuery.of(context).size.width - 32 - 8) / 2;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Wrap(spacing: 8, runSpacing: 8, children: [
-        for (final t in items)
+        for (final t in shown)
           GestureDetector(
             onTap: t.$5,
             child: Container(

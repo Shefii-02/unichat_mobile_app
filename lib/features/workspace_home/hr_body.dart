@@ -45,6 +45,7 @@ class HrBody extends ConsumerWidget {
       ]),
       WsSection(
         title: 'Leave requests',
+        perms: const ['hr.leave.approve', 'hr.manage'],
         action: 'See all ${fmtNum(pending)}',
         onAction: () => context.goToRoute('/hr/leave-requests'),
         child: WsRows([
@@ -60,6 +61,7 @@ class HrBody extends ConsumerWidget {
       if (payroll != null)
         WsSection(
           title: '${payroll['period']} payroll',
+          perms: const ['hr.manage'],
           action: 'Review',
           onAction: () => context.goToRoute('/hr/payrolls'),
           child: WsRows([

@@ -43,6 +43,7 @@ class AdminBody extends ConsumerWidget {
       ]),
       WsSection(
         title: 'Linked devices',
+        perms: const ['devices.view'],
         action: 'Manage',
         onAction: () => context.goToRoute('/devices'),
         child: WsRows([
@@ -51,6 +52,7 @@ class AdminBody extends ConsumerWidget {
       ),
       WsSection(
         title: 'Integrations',
+        perms: const ['integrations.view'],
         action: 'Manage',
         onAction: () => context.goToRoute('/integrations'),
         child: WsRows([
@@ -59,6 +61,7 @@ class AdminBody extends ConsumerWidget {
       ),
       WsSection(
         title: 'Roles & access',
+        perms: const ['roles.view'],
         action: '+ New role',
         onAction: () => context.goToRoute('/account/roles'),
         child: WsRows([

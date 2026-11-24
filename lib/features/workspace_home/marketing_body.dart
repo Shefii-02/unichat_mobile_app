@@ -56,6 +56,7 @@ class MarketingBody extends ConsumerWidget {
       ]),
       WsSection(
         title: 'Live campaigns',
+        perms: const ['campaigns.view', 'meta_ads.view'],
         action: 'All campaigns',
         onAction: () => context.goToRoute('/meta-ads/campaigns'),
         child: WsRows([
@@ -69,6 +70,7 @@ class MarketingBody extends ConsumerWidget {
       ),
       WsSection(
         title: 'Automation flows',
+        perms: const ['flow_builder.view', 'instagram.view'],
         action: '+ New flow',
         onAction: () => context.goToRoute('/instagram/automations'),
         child: WsRows([

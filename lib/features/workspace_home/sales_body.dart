@@ -51,6 +51,7 @@ class _SalesTeam extends ConsumerWidget {
       ]),
       WsSection(
         title: 'Recent chats',
+        perms: const ['wa_chat.chats.view', 'inbox.view'],
         action: 'Open inbox',
         onAction: () => context.goToRoute('/wa-chat/chats'),
         child: WsRows([

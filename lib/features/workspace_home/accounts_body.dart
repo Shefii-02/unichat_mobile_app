@@ -50,6 +50,7 @@ class AccountsBody extends ConsumerWidget {
       ]),
       WsSection(
         title: 'Outstanding invoices',
+        perms: const ['accounts.read'],
         action: 'See all ${fmtNum(acc?['open_invoices'])}',
         onAction: () => context.goToRoute('/accounts'),
         child: WsRows([
@@ -63,6 +64,7 @@ class AccountsBody extends ConsumerWidget {
       ),
       WsSection(
         title: 'Recent entries',
+        perms: const ['accounts.read'],
         action: 'Open books',
         onAction: () => context.goToRoute('/accounts'),
         child: WsRows([
@@ -77,6 +79,7 @@ class AccountsBody extends ConsumerWidget {
       ),
       WsSection(
         title: 'Wallet',
+        perms: const ['wallet.view'],
         action: 'Top up',
         onAction: () => context.goToRoute('/wallet'),
         child: WsRows([
@@ -87,6 +90,7 @@ class AccountsBody extends ConsumerWidget {
       ),
       WsSection(
         title: 'GST',
+        perms: const ['accounts.read'],
         child: WsRows([
           WsRow(title: 'Output GST', trailing: Text(fmtMoney(_sum(gst?['outward'])), style: const TextStyle(fontWeight: FontWeight.w600))),
           WsRow(title: 'Input credit', trailing: Text(fmtMoney(_sum(gst?['itc'])), style: const TextStyle(fontWeight: FontWeight.w600))),

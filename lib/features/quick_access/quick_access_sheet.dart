@@ -39,8 +39,9 @@ const _actions = <String, List<_Action>>{
     _Action(Icons.timer_outlined, 'Follow-ups', '/crm-followups', _red),
     _Action(Icons.chat_outlined, 'WhatsApp', '/wa-chat/chats', _green),
     _Action(Icons.layers_outlined, 'Deals', '/deals', _orange),
-    _Action(Icons.checklist_rounded, 'Tasks', '/crm-tasks', _teal),
+    _Action(Icons.flag_outlined, 'My target', '/target', _teal),
     _Action(Icons.event_outlined, 'Calendar', '/calendar', _pink),
+    _Action(Icons.beach_access_outlined, 'Leave', '/my-leave', _amber),
     _Action(Icons.summarize_outlined, 'Lead report', '/lead-report', _slate),
   ],
   'administrators': [

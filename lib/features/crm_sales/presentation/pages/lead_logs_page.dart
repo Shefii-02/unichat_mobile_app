@@ -97,6 +97,7 @@ class _LeadLogsPageState extends State<LeadLogsPage> {
                                 when(log['created_at']),
                               ].join(' · '),
                               leadingIcon: Icons.history_rounded,
+                              onTap: lead?['id'] != null ? () => context.push('/lead-detail/${lead!['id']}') : null,
                             );
                           },
                         ),

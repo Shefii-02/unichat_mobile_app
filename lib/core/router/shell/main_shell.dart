@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:unichat_mobile_app/features/workspace/workspace_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
 import 'package:unichat_mobile_app/core/nav/hidden_modules_provider.dart';
+import 'package:unichat_mobile_app/core/version/update_checker.dart';
 import 'package:unichat_mobile_app/features/quick_access/quick_access_sheet.dart';
 import 'package:unichat_mobile_app/core/nav/mobile_config_provider.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
@@ -29,7 +31,19 @@ class MainShell extends ConsumerWidget {
     _Tab(4, Icons.fingerprint_outlined, Icons.fingerprint_rounded, 'Attendance'),
     _Tab(5, Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Payroll'),
     _Tab(6, Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
+    _Tab(7, Icons.people_alt_outlined, Icons.people_alt_rounded, 'Leads'),
   ];
+
+  /// Bottom tabs per workspace (the user's main / chosen section), as shell-branch numbers in bar order; 3 is the raised
+  /// Quick button. Sales is lead-first (Leads, Tasks, Attendance, Payroll); the others lean on what their team does most.
+  /// Anything not listed — Company Admin, Administrators — gets the full default bar.
+  static const _layouts = <String, List<int>>{
+    'sales': [0, 7, 1, 3, 4, 5, 6],
+    'marketing': [0, 2, 1, 3, 4, 6],
+    'hr': [0, 4, 1, 3, 5, 2, 6],
+    'accounts': [0, 1, 5, 3, 4, 2, 6],
+  };
+  static const _defaultLayout = [0, 1, 2, 3, 4, 5, 6];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,7 +51,14 @@ class MainShell extends ConsumerWidget {
     final cfg = ref.watch(mobileConfigProvider).maybeWhen(data: (c) => c, orElse: () => const MobileConfig());
     // Home and Profile always stay; the company can switch the rest off.
     const keyOf = {1: 'todo', 2: 'chats', 3: 'explore', 4: 'attendance', 5: 'payroll'};
-    final tabs = [for (final t in _tabs) if (keyOf[t.branch] == null || cfg.tab(keyOf[t.branch]!)) t];
+    final workspace = ref.watch(activeWorkspaceProvider);
+    final order = _layouts[workspace] ?? _defaultLayout;
+    final canLeads = PermissionGuard.can('leads.view');
+    final tabs = [
+      for (final b in order)
+        if ((keyOf[b] == null || cfg.tab(keyOf[b]!)) && (b != 7 || canLeads))
+          workspace == 'sales' && b == 1 ? const _Tab(1, Icons.checklist_rounded, Icons.checklist_rounded, 'Tasks') : _tabs[b],
+    ];
     final exploreSlot = tabs.indexWhere((t) => t.raised);
     if (PermissionGuard.teamChatEnabled) ref.watch(teamChatRealtimeProvider); // keeps the staff socket up + refreshes chats on events
     final chatUnread = PermissionGuard.teamChatEnabled ? ref.watch(teamUnreadProvider) : 0;
@@ -48,7 +69,7 @@ class MainShell extends ConsumerWidget {
     const barH = 64.0, lift = 22.0;
 
     return Scaffold(
-      body: navigationShell,
+      body: UpdateOnOpen(child: navigationShell),   // checks for a new version once per app open
       // The raised button pokes above the bar, and a Stack can't be tapped outside its own bounds — so the
       // frame is [lift] taller than the bar itself, with the bar drawn in its lower part.
       bottomNavigationBar: SizedBox(

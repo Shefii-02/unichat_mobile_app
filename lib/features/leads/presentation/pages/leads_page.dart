@@ -1,4 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:unichat_mobile_app/features/workspace/workspace_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:unichat_mobile_app/core/network/dio_client.dart';
@@ -13,7 +17,10 @@ import 'package:unichat_mobile_app/features/modules/_shared.dart';
 /// (LeadController::index — stage/search/per_page params; auto-scoped to the caller's own
 /// leads unless they hold `leads.view_all`).
 class LeadsPage extends StatefulWidget {
-  const LeadsPage({super.key});
+  const LeadsPage({super.key, this.source, this.title});
+  /// Only leads from this source (Lead sources → tap a source)
+  final String? source;
+  final String? title;
   @override
   State<LeadsPage> createState() => _LeadsPageState();
 }
@@ -22,6 +29,7 @@ const _stageFilters = <(String label, String? stage)>[
   ('All', null),
   ('New', 'new'),
   ('Contacted', 'contacted'),
+  ('Follow-up', 'follow_up'),
   ('Won', 'enrolled'),
 ];
 
@@ -32,15 +40,44 @@ class _LeadsPageState extends State<LeadsPage> {
   int _page = 1;
   bool _hasMore = true;
   final _searchCtrl = TextEditingController();
+  ProviderSubscription<String?>? _wsSub;
+  Map<String, int> _counts = const {};   // stage → leads
+  int _missed = 0;                       // follow-ups past their time
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadCounts();
+    // the tab stays alive when the workspace is switched on Home, so reload with the new scope
+    _wsSub = ProviderScope.containerOf(context, listen: false).listen<String?>(activeWorkspaceProvider, (_, __) {
+      _load(reset: true);
+      _loadCounts();
+    });
+  }
+
+  /// Stage counts (GET /leads/dashboard) and missed follow-ups (GET /tasks/dashboard) for the status tiles. Best effort — tiles show "—" if either fails.
+  Future<void> _loadCounts() async {
+    try {
+      final d = await Api.one('/leads/dashboard');
+      final lists = (d['lists'] as List?) ?? const [];
+      final byStage = lists.whereType<Map>().firstWhere((l) => '${l['title']}'.toLowerCase() == 'by stage', orElse: () => const {});
+      final counts = <String, int>{};
+      for (final r in (byStage['rows'] as List? ?? const []).whereType<List>()) {
+        if (r.length > 1) counts['${r[0]}'.toLowerCase().replaceAll(' ', '_').replaceAll('-', '_')] = (r[1] as num).toInt();
+      }
+      if (mounted) setState(() => _counts = counts);
+    } catch (_) {}
+    try {
+      final t = await Api.one('/tasks/dashboard');
+      final k = ((t['kpis'] as List?) ?? const []).whereType<Map>().firstWhere((e) => '${e['label']}'.toLowerCase() == 'overdue', orElse: () => const {});
+      if (mounted) setState(() => _missed = (k['value'] as num?)?.toInt() ?? 0);
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _wsSub?.close();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -52,8 +89,13 @@ class _LeadsPageState extends State<LeadsPage> {
     }
     setState(() => _loading = true);
     try {
+      // In the Sales workspace the list is only the leads assigned to this person
+      final box = ProviderScope.containerOf(context);
+      final myId = box.read(activeWorkspaceProvider) == 'sales' ? box.read(authProvider).value?.id : null;
       final params = {
         'page': _page,
+        if (myId != null) 'assigned_to': myId,
+        if (widget.source != null) 'source': widget.source,
         if (_stage != null) 'stage': _stage,
         if (_searchCtrl.text.trim().isNotEmpty) 'search': _searchCtrl.text.trim(),
       };
@@ -170,7 +212,7 @@ class _LeadsPageState extends State<LeadsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Leads', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white)),
+                  Text(widget.title ?? 'Leads', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white)),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -201,6 +243,7 @@ class _LeadsPageState extends State<LeadsPage> {
                 ],
               ),
             ),
+            _statusTiles(),
             _filterChips(),
             Expanded(
               child: _loading && _leads.isEmpty
@@ -212,7 +255,10 @@ class _LeadsPageState extends State<LeadsPage> {
                           subtitle: 'No leads found for this filter.',
                         )
                       : RefreshIndicator(
-                          onRefresh: () => _load(reset: true),
+                          onRefresh: () async {
+                            await _load(reset: true);
+                            unawaited(_loadCounts());
+                          },
                           child: ListView.builder(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             itemCount: _leads.length + (_hasMore ? 1 : 0),
@@ -235,6 +281,63 @@ class _LeadsPageState extends State<LeadsPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Lead status tiles — New / Follow-up / Missed / Closed — each a shortcut to that filter (Missed opens the follow-ups list).
+  Widget _statusTiles() {
+    Widget tile(String label, int? n, Tint t, VoidCallback onTap, {bool selected = false}) => Expanded(
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              decoration: BoxDecoration(color: t.$1, borderRadius: BorderRadius.circular(12), border: selected ? Border.all(color: t.$2, width: 1.5) : null),
+              child: Column(children: [
+                Text(n == null ? '—' : '$n', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: t.$2)),
+                Text(label, style: TextStyle(fontSize: 10, color: t.$3)),
+              ]),
+            ),
+          ),
+        );
+    void pick(String? stage) {
+      setState(() => _stage = stage);
+      _load(reset: true);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(children: [
+        tile('New', _counts['new'], tintPeach, () => pick('new'), selected: _stage == 'new'),
+        const SizedBox(width: 8),
+        tile('Follow-up', _counts['follow_up'], tintAmber, () => pick('follow_up'), selected: _stage == 'follow_up'),
+        const SizedBox(width: 8),
+        tile('Missed', _missed, tintRed, () => context.push('/crm-followups')),
+        const SizedBox(width: 8),
+        tile('Closed', _counts['enrolled'], tintGreen, () => pick('enrolled'), selected: _stage == 'enrolled'),
+      ]),
+    );
+  }
+
+  /// "Contact now": one tap opens Call / WhatsApp for the lead.
+  void _contactNow(String name, String phone) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(phone)),
+          ListTile(
+            leading: const Icon(Icons.call_rounded, color: Colors.green),
+            title: const Text('Call'),
+            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('tel:$phone')); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.message_rounded, color: Colors.green),
+            title: const Text('WhatsApp'),
+            onTap: () { Navigator.pop(ctx); launchUrl(Uri.parse('https://wa.me/${phone.replaceAll(RegExp(r'[^0-9]'), '')}'), mode: LaunchMode.externalApplication); },
+          ),
+        ]),
       ),
     );
   }
@@ -271,6 +374,14 @@ class _LeadsPageState extends State<LeadsPage> {
     );
   }
 
+  /// "12 Nov" style short date from an ISO string.
+  String _day(Object? iso) {
+    final d = DateTime.tryParse('$iso')?.toLocal();
+    if (d == null) return '—';
+    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${d.day} ${m[d.month - 1]}';
+  }
+
   Widget _leadRow(Map<String, dynamic> lead) {
     final contact = lead['contact'] as Map<String, dynamic>?;
     final name = contact?['name'] as String? ?? 'Unknown';
@@ -299,6 +410,14 @@ class _LeadsPageState extends State<LeadsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name, style: const TextStyle(fontSize: 13.5)),
+                  if (lead['created_at'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Created ${_day(lead['created_at'])}${lead['last_activity_at'] != null ? ' · Active ${_day(lead['last_activity_at'])}' : ''}',
+                        style: TextStyle(fontSize: 10.5, color: context.mutedColor),
+                      ),
+                    ),
                   if (source.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
@@ -317,22 +436,19 @@ class _LeadsPageState extends State<LeadsPage> {
                       style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: tint.$2)),
                 ),
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    if (phone.isNotEmpty) ...[
-                      GestureDetector(
-                        onTap: () => launchUrl(Uri.parse('tel:$phone')),
-                        child: Icon(Icons.call_rounded, size: 15, color: Theme.of(context).colorScheme.primary),
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: () => launchUrl(
-                            Uri.parse('https://wa.me/${phone.replaceAll(RegExp(r'[^0-9]'), '')}')),
-                        child: Icon(Icons.message_rounded, size: 15, color: Theme.of(context).colorScheme.primary),
-                      ),
-                    ],
-                  ],
-                ),
+                if (phone.isNotEmpty)
+                  GestureDetector(
+                    onTap: () => _contactNow(name, phone),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: M.taskDoneBg, borderRadius: BorderRadius.circular(99)),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.call_rounded, size: 12, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text('Contact now', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white)),
+                      ]),
+                    ),
+                  ),
               ],
             ),
           ],
