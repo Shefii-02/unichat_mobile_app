@@ -15,6 +15,7 @@ import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_pro
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/settings/legal_webview_sheet.dart';
+import 'package:unichat_mobile_app/features/settings/presentation/widgets/notification_modes_card.dart';
 import 'package:unichat_mobile_app/features/sticky/sticky_overlay.dart';
 
 // Placeholder — swap for the real hosted URL once available.
@@ -403,6 +404,7 @@ class _NotificationSection extends ConsumerWidget {
     // toggling enabled/value avoids that entirely.
     return Column(
       children: [
+        const NotificationModesCard(),
         if (async.hasError)
           Padding(
             padding: const EdgeInsets.all(16),

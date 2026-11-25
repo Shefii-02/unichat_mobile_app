@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/extra_permissions_view.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 /// Per-staff access: web-portal / mobile-app switches plus the prebuilt access sections (one main + any
@@ -24,6 +25,9 @@ class _StaffAccessSheetState extends State<_StaffAccessSheet> {
   bool _loading = true, _saving = false, _portal = true, _mobile = true;
   String? _main, _error;
   final _subs = <String>{};
+  // individual access: what this person's role and sections already give, and what is added for them alone
+  List<Map<String, dynamic>> _catalogue = [];
+  final _fromRole = <String>{}, _fromSections = <String>{}, _extra = <String>{};
 
   @override
   void initState() {
@@ -42,6 +46,10 @@ class _StaffAccessSheetState extends State<_StaffAccessSheet> {
         _mobile = cur['mobile_access'] != false;
         _main = cur['main'] as String?;
         _subs..clear()..addAll(((cur['subs'] as List?) ?? const []).map((e) => '$e'));
+        _catalogue = ((cur['permission_catalogue'] as List?) ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _fromRole..clear()..addAll(((cur['role_permissions'] as List?) ?? const []).map((e) => '$e'));
+        _fromSections..clear()..addAll(((cur['section_permissions'] as List?) ?? const []).map((e) => '$e'));
+        _extra..clear()..addAll(((cur['extra_permissions'] as List?) ?? const []).map((e) => '$e'));
         _loading = false;
       });
     } catch (e) {
@@ -53,7 +61,7 @@ class _StaffAccessSheetState extends State<_StaffAccessSheet> {
     setState(() { _saving = true; _error = null; });
     try {
       await Api.put('/staff/${widget.staff['id']}/access',
-          data: {'portal_access': _portal, 'mobile_access': _mobile, 'main': _main, 'subs': _subs.toList()});
+          data: {'portal_access': _portal, 'mobile_access': _mobile, 'main': _main, 'subs': _subs.toList(), 'extra_permissions': _extra.toList()});
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() { _saving = false; _error = apiErrorMessage(e); });
@@ -93,6 +101,17 @@ class _StaffAccessSheetState extends State<_StaffAccessSheet> {
                   const Text('Pick one main section and any extra sub sections. They add to what the role allows.', style: TextStyle(fontSize: 12)),
                   const SizedBox(height: 6),
                   for (final s in _sections) _sectionTile(theme, s),
+                  const Divider(height: 28),
+                  Text('➕ Additional access', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  ExtraPermissionsView(
+                    name: str(widget.staff['name']),
+                    catalogue: _catalogue,
+                    fromRole: _fromRole,
+                    fromSections: _fromSections,
+                    extra: _extra,
+                    onChanged: () => setState(() {}),
+                  ),
                   if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: Color(0xFFB91C1C)))),
                   const SizedBox(height: 12),
                   FilledButton(
@@ -119,6 +138,8 @@ class _StaffAccessSheetState extends State<_StaffAccessSheet> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${s['icon']} ${s['label']}', style: const TextStyle(fontWeight: FontWeight.w700)),
           Text('${s['description']}', style: const TextStyle(fontSize: 12)),
+          // what ticking it adds — the sum of its permissions
+          if (s['permissions'] is List) Padding(padding: const EdgeInsets.only(top: 2), child: Text('Grants ${(s['permissions'] as List).length} permissions', style: TextStyle(fontSize: 11, color: theme.colorScheme.primary))),
           Row(children: [
             ChoiceChip(
               label: const Text('Main'),

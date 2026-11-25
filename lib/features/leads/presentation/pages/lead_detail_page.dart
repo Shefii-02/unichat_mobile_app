@@ -11,11 +11,27 @@ final _leadProvider = FutureProvider.family<Rec, int>(
   (ref, id) => Api.one('/leads/$id'),
 );
 final _leadNotesProvider = FutureProvider.family<List<Rec>, int>(
-  (ref, id) => Api.list('/leads/$id/notes'),
+  (ref, id) async => _rows(await Api.one('/leads/$id/notes'), 'notes'),
 );
 final _leadEventsProvider = FutureProvider.family<List<Rec>, int>(
-  (ref, id) => Api.list('/leads/$id/events'),
+  (ref, id) async => _rows(await Api.one('/leads/$id/events'), 'events'),
 );
+
+// these two endpoints answer {notes:[…]} / {events:[…]}, which the generic list helper does not unwrap
+List<Rec> _rows(Rec body, String key) =>
+    ((body[key] as List?) ?? const []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+
+String _eventText(Rec e) {
+  final p = e['payload'] is Map ? (e['payload'] as Map) : const {};
+  final name = str(e['event']).replaceAll('_', ' ');
+  final bits = [
+    if (p['from'] != null && p['to'] != null) '${p['from']} → ${p['to']}',
+    if (p['content'] != null) '${p['content']}',
+    if (p['reason'] != null && '${p['reason']}'.isNotEmpty) 'Reason: ${p['reason']}',
+  ];
+  final by = e['user'] is Map ? ' · ${(e['user'] as Map)['name']}' : '';
+  return '${name.isEmpty ? '' : name[0].toUpperCase() + name.substring(1)}${bits.isEmpty ? '' : ' — ${bits.join('; ')}'}$by';
+}
 
 const _stages = ['new', 'contacted', 'follow_up', 'enrolled', 'lost'];
 const _priorities = ['low', 'medium', 'high'];
@@ -46,6 +62,7 @@ class LeadDetailPage extends ConsumerWidget {
             ],
           ),
           actions: [
+            IconButton(icon: const Icon(Icons.add_call), tooltip: 'Log activity', onPressed: () => _logActivity(context, ref)),
             if (PermissionGuard.can('leads.manage'))
               PopupMenuButton<String>(
                 onSelected: (v) async {
@@ -192,9 +209,18 @@ class LeadDetailPage extends ConsumerWidget {
             tintOf: (s) => stageTint[s],
             labelOf: stageLabel,
             onChanged: (v) async {
+              // the server wants a reason to close as Lost, to reopen a closed lead, or to change a closed lead's outcome (Won's is optional)
+              final closed = stage == 'enrolled' || stage == 'lost';
+              final needs = v != stage && (v == 'lost' || closed);
+              final data = <String, dynamic>{'stage': v};
+              if (needs || (v == 'enrolled' && v != stage)) {
+                final reason = await _askReason(context, needs);
+                if (reason == null) return;
+                if (reason.isNotEmpty) data['reason'] = reason;
+              }
               final ok = await runAction(
                 context,
-                () => Api.put('/leads/$id', data: {'stage': v}),
+                () => Api.put('/leads/$id', data: data),
                 success: 'Stage updated',
               );
               if (ok) _refresh(ref);
@@ -323,12 +349,7 @@ class LeadDetailPage extends ConsumerWidget {
                         return ListTile(
                           leading: const Icon(Icons.circle, size: 10),
                           title: Text(
-                            str(
-                              e['description'] ??
-                                  e['event'] ??
-                                  e['type'] ??
-                                  e['action'],
-                            ),
+                            _eventText(e),
                           ),
                           subtitle: Text(when(e['created_at'])),
                         );
@@ -336,6 +357,58 @@ class LeadDetailPage extends ConsumerWidget {
                     ),
                   ),
     );
+  }
+
+  /// A reason for the stage change; null = cancelled, '' = skipped (only when [required] is false).
+  Future<String?> _askReason(BuildContext context, bool required) {
+    final c = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          title: Text(required ? 'Reason' : 'Add a note (optional)'),
+          content: TextField(controller: c, autofocus: true, maxLines: 3, maxLength: 500, onChanged: (_) => set(() {}), decoration: const InputDecoration(hintText: 'Why is this changing?')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: required && c.text.trim().isEmpty ? null : () => Navigator.pop(ctx, c.text.trim()),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Log a call / message / meeting, with its outcome and an optional next follow-up.
+  Future<void> _logActivity(BuildContext context, WidgetRef ref) async {
+    final data = <String, dynamic>{};
+    DateTime? next;
+    final ok = await showFormSheet(
+      context,
+      title: 'Log activity',
+      submitLabel: 'Save',
+      fields: (ctx) => [
+        FSelect<String>(label: 'Type', options: const ['call', 'message', 'meeting', 'visit', 'other'], initial: 'call', labelOf: (v) => v[0].toUpperCase() + v.substring(1), onSaved: (v) => data['kind'] = v ?? 'call'),
+        FSelect<String>(label: 'Outcome', options: const ['connected', 'not_reachable', 'callback', 'interested', 'not_interested', 'wrong_number'], labelOf: (v) => v.replaceAll('_', ' '), onSaved: (v) { if (v != null) data['outcome'] = v; }),
+        FText(label: 'Notes', maxLines: 3, onSaved: (v) { if (v.isNotEmpty) data['notes'] = v; }),
+        StatefulBuilder(
+          builder: (c, set) => OutlinedButton.icon(
+            icon: const Icon(Icons.event_rounded),
+            label: Text(next == null ? 'Next follow-up (optional)' : 'Follow up ${next.toString().substring(0, 16)}'),
+            onPressed: () async {
+              final d = await showDatePicker(context: c, initialDate: DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 730)));
+              if (d == null || !c.mounted) return;
+              final t = await showTimePicker(context: c, initialTime: const TimeOfDay(hour: 10, minute: 0));
+              if (t == null) return;
+              set(() => next = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+            },
+          ),
+        ),
+      ],
+      onSubmit: () => Api.post('/leads/$id/activities', data: {...data, if (next != null) 'next_follow_up_at': next!.toIso8601String()}),
+    );
+    if (ok) _refresh(ref);
   }
 
   Future<void> _addNote(BuildContext context, WidgetRef ref) async {

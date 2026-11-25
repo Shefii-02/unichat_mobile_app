@@ -16,6 +16,12 @@ class SecureStorageService {
   static Future<String?> getToken() => _storage.read(key: _tokenKey);
   static Future<void> deleteToken() => _storage.delete(key: _tokenKey);
 
+  // The owner's own session, kept while they are signed in as a staff member ("Login as") so they can switch back.
+  static const _originalTokenKey = 'auth_token_original';
+  static Future<void> saveOriginalToken(String token) => _storage.write(key: _originalTokenKey, value: token);
+  static Future<String?> getOriginalToken() => _storage.read(key: _originalTokenKey);
+  static Future<void> deleteOriginalToken() => _storage.delete(key: _originalTokenKey);
+
   static Future<void> saveCredentials({
     required String orgId,
     required String phone,

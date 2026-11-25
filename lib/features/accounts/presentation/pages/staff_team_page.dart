@@ -2,7 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
+import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/features/accounts/presentation/pages/staff_access_sheet.dart';
+import 'package:unichat_mobile_app/features/accounts/presentation/pages/staff_extras_sheet.dart';
+import 'package:unichat_mobile_app/features/auth/impersonation.dart';
+import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
@@ -45,6 +49,23 @@ class StaffTeamPage extends ConsumerWidget {
                 RowMenu(items: PermissionGuard.can('staff.manage') ? [
                   ('Edit', Icons.edit_rounded, () => _edit(context, ref, s)),
                   ('Access (portal / mobile / sections)', Icons.admin_panel_settings_rounded, () => showStaffAccessSheet(context, s)),
+                  ('Profile (designation, joining date, documents)', Icons.badge_outlined, () => showStaffExtrasSheet(context, s)),
+                  // the owner (or anyone given "Sign in as staff") can open the app as this person; never as an owner or an inactive account
+                  if (canLoginAs() && active && s['id'] != ref.read(authProvider).value?.id && !(s['role'] is Map && (s['role'] as Map)['name'] == 'owner'))
+                    (
+                      'Login as ${str(s['name'])}',
+                      Icons.login_rounded,
+                      () async {
+                        if (!await confirm(context, title: 'Sign in as ${str(s['name'])}?', message: 'You will see the app exactly as they do. A bar at the bottom lets you switch back to your own account.', confirmLabel: 'Sign in')) { return; }
+                        final err = await startLoginAs(ref, (s['id'] as num).toInt());
+                        if (!context.mounted) return;
+                        if (err != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+                        } else {
+                          context.go('/home');
+                        }
+                      }
+                    ),
                   (
                     active ? 'Deactivate' : 'Activate',
                     Icons.toggle_on_rounded,

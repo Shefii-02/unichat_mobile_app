@@ -32,6 +32,10 @@
 	<string>Teamzo uses Face ID to unlock the app and protect sensitive customer data.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Teamzo checks your location when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Teamzo checks your location only when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat. It does not track you in the background.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Teamzo checks your location only when you clock in/out or take a break, to confirm you're within the office radius, and when you share your location in a chat. It does not track you in the background.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Teamzo needs the microphone to record voice notes and video attachments.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

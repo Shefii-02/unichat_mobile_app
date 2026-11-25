@@ -11,6 +11,7 @@ import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/team_chat/team_chat_data.dart';
 import 'package:unichat_mobile_app/services/push_service.dart';
 import 'package:unichat_mobile_app/features/leads/presentation/widgets/lead_offer_dialog.dart';
+import 'package:unichat_mobile_app/features/auth/impersonation.dart';
 
 /// The one persistent bottom-nav frame. Wraps a [StatefulNavigationShell] (see
 /// `StatefulShellRoute.indexedStack` in app_router.dart) — each tab keeps its own Navigator
@@ -76,7 +77,26 @@ class MainShell extends ConsumerWidget {
       body: UpdateOnOpen(child: navigationShell),   // checks for a new version once per app open
       // The raised button pokes above the bar, and a Stack can't be tapped outside its own bounds — so the
       // frame is [lift] taller than the bar itself, with the bar drawn in its lower part.
-      bottomNavigationBar: SizedBox(
+      bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
+        // "Login as": a bar to switch back to your own account
+        if (ref.watch(impersonatingProvider) != null)
+          Material(
+            color: Colors.deepPurple,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              child: Row(children: [
+                const Icon(Icons.login_rounded, size: 16, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Signed in as ${ref.watch(impersonatingProvider)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600))),
+                TextButton(
+                  style: TextButton.styleFrom(foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
+                  onPressed: () async { await switchBack(ref); if (context.mounted) context.go('/home'); },
+                  child: const Text('Switch back'),
+                ),
+              ]),
+            ),
+          ),
+        SizedBox(
         height: barH + lift + bottomInset,
         child: Stack(children: [
           Positioned(
@@ -119,6 +139,7 @@ class MainShell extends ConsumerWidget {
             ),
         ]),
       ),
+      ]),
     );
   }
 

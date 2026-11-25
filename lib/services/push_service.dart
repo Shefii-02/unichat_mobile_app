@@ -20,6 +20,8 @@ class PushService {
   static final PushService instance = PushService._();
 
   String? _token;
+  /// This phone's push token (null until registered) — lets Settings tell which of your devices is this one.
+  String? get token => _token;
   bool _listening = false;
 
   /// The team chat that is open on screen right now (its own messages should not beep at you).

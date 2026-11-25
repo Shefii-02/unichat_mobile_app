@@ -30,6 +30,7 @@ class NotificationTones {
 
   /// Plays a tone once; the same tone within a second is ignored (a burst of pushes is one sound).
   static Future<void> play(String? key) async {
+    if (key != null && key.isEmpty) return;   // a notification-only push carries an empty tone
     final file = files[key ?? 'general'] ?? files['general']!;
     final now = DateTime.now();
     final last = _last[file];
@@ -61,6 +62,8 @@ class NotificationTones {
           playSound: true,
         ));
       }
+      // "notification only": shown, but no sound
+      await android?.createNotificationChannel(const AndroidNotificationChannel('tone_silent', 'Notification only (no tone)', importance: Importance.defaultImportance, playSound: false));
       _channelsDone = true;
     } catch (e) {
       debugPrint('Tone channels failed: $e');

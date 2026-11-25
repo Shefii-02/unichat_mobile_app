@@ -295,25 +295,107 @@ class FSelect<T> extends StatefulWidget {
 class _FSelectState<T> extends State<FSelect<T>> {
   late T? _value = widget.initial;
 
+  String _label(T o) => widget.labelOf?.call(o) ?? '$o';
+
   @override
   Widget build(BuildContext context) {
+    // a short list is a plain dropdown; a longer one opens a sheet with a search box, so one entry can be found by typing
+    if (widget.options.length > 5) {
+      return FField(
+        label: widget.label,
+        child: FormField<T>(
+          initialValue: _value,
+          onSaved: (v) => widget.onSaved(v ?? _value),
+          builder: (st) => InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              final picked = await showSearchPicker<T>(context, title: widget.label, options: widget.options, labelOf: _label, selected: _value);
+              if (picked != null) {
+                setState(() => _value = picked.value);
+                st.didChange(picked.value);
+              }
+            },
+            child: InputDecorator(
+              decoration: const InputDecoration(border: OutlineInputBorder(), suffixIcon: Icon(Icons.search_rounded), isDense: true),
+              child: Text(
+                _value != null ? _label(_value as T) : (widget.hint ?? 'Search & select'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _value == null ? TextStyle(color: context.mutedColor) : null,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return FField(
       label: widget.label,
       child: DropdownButtonFormField<T>(
         initialValue: _value,
         isExpanded: true,
         hint: widget.hint != null ? Text(widget.hint!) : null,
-        items: widget.options
-            .map((o) => DropdownMenuItem(
-                  value: o,
-                  child: Text(widget.labelOf?.call(o) ?? '$o'),
-                ))
-            .toList(),
+        items: widget.options.map((o) => DropdownMenuItem(value: o, child: Text(_label(o)))).toList(),
         onChanged: (v) => setState(() => _value = v),
         onSaved: (v) => widget.onSaved(v ?? _value),
       ),
     );
   }
+}
+
+/// A bottom sheet with a search box over [options]; returns the chosen one (wrapped, so choosing "nothing" can be told from closing).
+Future<({T value})?> showSearchPicker<T>(
+  BuildContext context, {
+  required String title,
+  required List<T> options,
+  required String Function(T) labelOf,
+  String? Function(T)? subtitleOf,
+  T? selected,
+}) {
+  return showModalBottomSheet<({T value})>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) {
+      var q = '';
+      return StatefulBuilder(builder: (ctx, set) {
+        final shown = [for (final o in options) if (q.isEmpty || labelOf(o).toLowerCase().contains(q) || (subtitleOf?.call(o) ?? '').toLowerCase().contains(q)) o];
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: TextField(
+                  autofocus: true,
+                  onChanged: (v) => set(() => q = v.trim().toLowerCase()),
+                  decoration: InputDecoration(hintText: 'Search $title', prefixIcon: const Icon(Icons.search_rounded), border: const OutlineInputBorder(), isDense: true),
+                ),
+              ),
+              Expanded(
+                child: shown.isEmpty
+                    ? const Center(child: Text('Nothing found'))
+                    : ListView.builder(
+                        itemCount: shown.length,
+                        itemBuilder: (_, i) {
+                          final o = shown[i];
+                          final sub = subtitleOf?.call(o);
+                          return ListTile(
+                            dense: true,
+                            title: Text(labelOf(o)),
+                            subtitle: sub == null || sub.isEmpty ? null : Text(sub),
+                            trailing: o == selected ? const Icon(Icons.check_rounded) : null,
+                            onTap: () => Navigator.pop(ctx, (value: o)),
+                          );
+                        },
+                      ),
+              ),
+            ]),
+          ),
+        );
+      });
+    },
+  );
 }
 
 /// Comma / newline separated list input that saves a `List<String>`.

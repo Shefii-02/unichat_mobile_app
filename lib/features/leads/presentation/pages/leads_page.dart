@@ -10,6 +10,8 @@ import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/features/leads/lead_stage.dart';
+import 'package:unichat_mobile_app/features/leads/presentation/widgets/lead_contact_fields.dart';
+import 'package:unichat_mobile_app/features/leads/presentation/widgets/lead_form_fields.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 /// Lead pipeline list: All/New/Contacted/Won (Lead.stage) with search-by-name/phone, quick
@@ -113,23 +115,6 @@ class _LeadsPageState extends State<LeadsPage> {
   }
 
   Future<void> _createLead() async {
-    List<Map<String, dynamic>> contacts;
-    try {
-      contacts = await Api.list('/contacts', query: {'per_page': 100});
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
-      }
-      return;
-    }
-    if (!mounted || contacts.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Add a contact first.')));
-      }
-      return;
-    }
     // Full staff roster was fetched here regardless of staff.view — the "Assign to" field
     // below already tolerates an empty list, so gating the fetch just omits that field.
     List<Map<String, dynamic>> staff = const [];
@@ -142,26 +127,21 @@ class _LeadsPageState extends State<LeadsPage> {
     }
     if (!mounted) return;
     final data = <String, dynamic>{};
+    final who = LeadContactState();
+    final form = LeadFormState();
     final ok = await showFormSheet(
       context,
       title: 'New lead',
       submitLabel: 'Create',
       fields: (ctx) => [
-        FSelect<Map<String, dynamic>>(
-          label: 'Contact',
-          options: contacts,
-          labelOf: (c) => '${c['name'] ?? c['phone']} · ${c['phone'] ?? ''}',
-          onSaved: (c) => data['contact_id'] = c?['id'],
-        ),
+        LeadOriginField(state: form),   // first: which number / account / campaign it came from
+        LeadContactFields(state: who),
+        LeadCategoriesField(state: form),
         FSelect<String>(
           label: 'Priority',
           options: const ['low', 'medium', 'high'],
           initial: 'medium',
           onSaved: (v) => data['priority'] = v ?? 'medium',
-        ),
-        FText(
-          label: 'Category',
-          onSaved: (v) => v.isEmpty ? null : data['category'] = v,
         ),
         if (staff.isNotEmpty)
           FSelect<Map<String, dynamic>>(
@@ -176,8 +156,16 @@ class _LeadsPageState extends State<LeadsPage> {
           onSaved: (v) => v.isEmpty ? null : data['notes'] = v,
         ),
       ],
-      onSubmit: () => Api.post('/leads', data: data),
+      onSubmit: () async {
+        if (!who.ready) throw Exception('Wait for the number check to finish.');
+        data['contact_id'] = await who.save();
+        data.addAll(form.originData());
+        if (form.categories.isNotEmpty) data['categories'] = form.categories;
+        await Api.post('/leads', data: data);
+      },
     );
+    who.dispose();
+    form.dispose();
     if (ok) _load(reset: true);
   }
 

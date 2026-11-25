@@ -47,6 +47,11 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     return err is DeviceLimitException ? err : null;
   }
 
+  /// Swap the signed-in person without a new login ("Login as" a staff member, and switching back) — no app-lock prompt.
+  void switchTo(UserModel user) {
+    state = AsyncData(user);
+  }
+
   /// Called by the device-login flow once `claim` has persisted the session.
   void adopt(UserModel user) {
     state = AsyncData(user);
