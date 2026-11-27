@@ -22,27 +22,7 @@ class InstagramInboxPage extends ConsumerWidget {
           ]),
         ),
         body: TabBarView(children: [
-          ProviderList(
-            provider: igConversationsProvider,
-            emptyLabel: 'No DM conversations',
-            emptyIcon: Icons.forum_rounded,
-            tile: (context, c) => RecordCard(
-              title: str(c['participant_username'] ?? c['username'] ?? c['participant_id'], 'Conversation'),
-              subtitle: str(c['last_message_preview'] ?? c['last_message'] ?? c['preview']),
-              leadingIcon: Icons.person_rounded,
-              leadingColor: const Color(0xFFE1306C),
-              onTap: () => openConversation(context, ref, c),
-              trailing: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(when(c['last_message_at'] ?? c['updated_at']),
-                      style: TextStyle(fontSize: 11, color: context.mutedColor)),
-                  const SizedBox(height: 4),
-                  StatusPill(str(c['status'], 'open')),
-                ],
-              ),
-            ),
-          ),
+          const _IgInboxTab(),
           ProviderList(
             provider: igAccountsProvider,
             emptyLabel: 'No Instagram accounts connected',
@@ -219,5 +199,86 @@ class InstagramInboxPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+
+/// The Instagram DM inbox with two tabs — All chats, or only the ones assigned to me (the open tab is underlined).
+class _IgInboxTab extends ConsumerStatefulWidget {
+  const _IgInboxTab();
+  @override
+  ConsumerState<_IgInboxTab> createState() => _IgInboxTabState();
+}
+
+class _IgInboxTabState extends ConsumerState<_IgInboxTab> {
+  bool _mine = false;
+  List<Rec>? _rows;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final rows = await Api.list('/instagram/conversations', query: {if (_mine) 'mine': 1});
+      if (mounted) setState(() { _rows = rows; _error = null; });
+    } catch (e) {
+      if (mounted) setState(() => _error = apiErrorMessage(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Column(children: [
+      Row(children: [
+        for (final (label, mine) in [('All chats', false), ('Assigned to me', true)])
+          Expanded(
+            child: InkWell(
+              onTap: () { if (_mine != mine) { setState(() { _mine = mine; _rows = null; }); _load(); } },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 11),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _mine == mine ? primary : Colors.transparent, width: 2.5))),
+                child: Text(label, style: TextStyle(fontWeight: _mine == mine ? FontWeight.w800 : FontWeight.w500, color: _mine == mine ? null : context.mutedColor)),
+              ),
+            ),
+          ),
+      ]),
+      Expanded(
+        child: _error != null
+            ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(_error!, textAlign: TextAlign.center), TextButton(onPressed: () { setState(() => _error = null); _load(); }, child: const Text('Try again'))])))
+            : _rows == null
+                ? const Center(child: CircularProgressIndicator())
+                : _rows!.isEmpty
+                    ? Center(child: Text(_mine ? 'Nothing is assigned to you here.' : 'No DM conversations', style: TextStyle(color: context.mutedColor)))
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _rows!.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, i) {
+                            final c = _rows![i];
+                            return RecordCard(
+                              title: str(c['participant_username'] ?? c['username'] ?? c['participant_id'], 'Conversation'),
+                              subtitle: str(c['last_message_preview'] ?? c['last_message'] ?? c['preview']),
+                              leadingIcon: Icons.person_rounded,
+                              leadingColor: const Color(0xFFE1306C),
+                              onTap: () => const InstagramInboxPage().openConversation(context, ref, c),
+                              trailing: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                Text(when(c['last_message_at'] ?? c['updated_at']), style: TextStyle(fontSize: 11, color: context.mutedColor)),
+                                const SizedBox(height: 4),
+                                StatusPill(str(c['status'], 'open')),
+                              ]),
+                            );
+                          },
+                        ),
+                      ),
+      ),
+    ]);
   }
 }

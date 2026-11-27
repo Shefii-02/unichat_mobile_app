@@ -18,7 +18,7 @@ import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/core/socket/socket_service.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
-const _tabs = [('unread', 'Unread'), ('read', 'Read'), ('closed', 'Closed')];
+const _tabs = [('all', 'All'), ('unread', 'Unread'), ('read', 'Read'), ('closed', 'Closed')];
 const _fallbackPoll = Duration(seconds: 30); // only while the realtime socket is down
 const _node = '/api/widget-chat';
 const _maxBytes = 2 * 1024 * 1024; // chat files are capped at 2 MB (also enforced server-side)
@@ -35,7 +35,10 @@ class WidgetChatsPage extends StatefulWidget {
 class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProviderStateMixin {
   late final TabController _tc = TabController(length: _tabs.length, vsync: this)..addListener(_onTab);
   List<Rec> _rows = [];
-  Map<String, int> _counts = {'unread': 0, 'read': 0, 'closed': 0};
+  Map<String, int> _counts = {'all': 0, 'unread': 0, 'read': 0, 'closed': 0};
+  // the two main tabs: every website chat, or only those assigned to me (chat-server filters on the assigned staff member)
+  bool _mine = false;
+  Map<String, int> _scopeCounts = {'all': 0, 'mine': 0};
   bool _loading = true;
   Timer? _timer;
   StreamSubscription? _wsSub;
@@ -96,14 +99,14 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
       _muted = m['muted'] == true;
       _handling = (m['handling'] as num?)?.toInt() ?? 0;
       _limit = (m['limit'] as num?)?.toInt() ?? 5;
-      final res = await DioClient.chatDio.get('$_node/inbox', queryParameters: {'tab': tab, 'per_page': 100, if (_q.isNotEmpty) 'q': _q});
+      final res = await DioClient.chatDio.get('$_node/inbox', queryParameters: {'tab': tab, 'per_page': 100, if (_mine) 'scope': 'mine', if (_q.isNotEmpty) 'q': _q});
       final body = (res.data as Map).cast<String, dynamic>();
       final list = (body['data'] as List? ?? []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
       final c = (body['counts'] as Map?)?.cast<String, dynamic>() ?? {};
       if (!mounted || tab != _tab) return;
 
       // Snackbar once per newly waiting live request (not for ones already waiting when the page opened).
-      if (tab == 'unread') {
+      if (tab == 'unread' || tab == 'all') {
         for (final r in list.where((r) => r['live_status'] == 'waiting')) {
           final id = (r['id'] as num).toInt();
           if (_seenWaiting.add(id) && !_firstLoad && !_muted) {
@@ -117,6 +120,8 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
       setState(() {
         _rows = list;
         _counts = {for (final t in _tabs) t.$1: (c[t.$1] as num?)?.toInt() ?? 0};
+        final sc = (body['scope_counts'] as Map?)?.cast<String, dynamic>();
+        if (sc != null) _scopeCounts = {'all': (sc['all'] as num?)?.toInt() ?? 0, 'mine': (sc['mine'] as num?)?.toInt() ?? 0};
         _loading = false;
       });
     } on DioException catch (e) {
@@ -215,6 +220,21 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
           : _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(children: [
+              // All chats / Assigned to me (the open one is underlined)
+              Row(children: [
+                for (final (label, mine, n) in [('All chats', false, _scopeCounts['all']), ('Assigned to me', true, _scopeCounts['mine'])])
+                  Expanded(
+                    child: InkWell(
+                      onTap: () { if (_mine != mine) { setState(() { _mine = mine; _loading = true; _rows = []; }); _load(); } },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _mine == mine ? Theme.of(context).colorScheme.primary : Colors.transparent, width: 2.5))),
+                        child: Text('$label · $n', style: TextStyle(fontWeight: _mine == mine ? FontWeight.w800 : FontWeight.w500)),
+                      ),
+                    ),
+                  ),
+              ]),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                 child: TextField(
@@ -229,7 +249,7 @@ class _WidgetChatsPageState extends State<WidgetChatsPage> with SingleTickerProv
                 child: RefreshIndicator(
                   onRefresh: _load,
                   child: _rows.isEmpty
-                      ? ListView(children: [Padding(padding: const EdgeInsets.all(48), child: Center(child: Text('No $_tab chats.')))])
+                      ? ListView(children: [Padding(padding: const EdgeInsets.all(48), child: Center(child: Text(_mine ? 'No chats assigned to you here.' : 'No $_tab chats.')))])
                       : ListView(children: [for (final g in _groups) ..._group(g)]),
                 ),
               ),

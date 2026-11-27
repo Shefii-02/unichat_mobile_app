@@ -5,6 +5,10 @@ import "package:unichat_mobile_app/features/modules/module_providers.dart";
 import "package:unichat_mobile_app/features/modules/_shared.dart";
 
 const _igPink = Color(0xFFE1306C);
+
+/// The connected accounts of one channel — 'instagram' or 'facebook' (Messenger: a Facebook Page and its posts).
+final _accountsByChannel = FutureProvider.family<List<Rec>, String>((ref, channel) => Api.list('/instagram/accounts', query: {'channel': channel}));
+
 /// Shared account picker used by both Comments and Insights — Instagram
 /// features are always scoped to one connected account at a time.
 class _AccountPickerBar extends StatelessWidget {
@@ -47,23 +51,46 @@ class InstagramCommentsPage extends ConsumerStatefulWidget {
 
 class _InstagramCommentsPageState extends ConsumerState<InstagramCommentsPage> {
   Rec? _account;
+  String _channel = 'instagram';   // Instagram or Messenger — the same screen for both
 
   @override
   Widget build(BuildContext context) {
-    final accountsAsync = ref.watch(igAccountsProvider);
+    final accountsAsync = ref.watch(_accountsByChannel(_channel));
     return Scaffold(
-      appBar: AppBar(title: const Text('Instagram Comments')),
+      appBar: AppBar(title: Text(_channel == 'facebook' ? 'Messenger Comments' : 'Instagram Comments')),
       body: accountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text(apiErrorMessage(e))),
         data: (accounts) {
+          final switcher = Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(children: [
+              for (final (k, label) in [('instagram', '📸 Instagram'), ('facebook', '💭 Messenger')])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(label),
+                    selected: _channel == k,
+                    showCheckmark: false,
+                    backgroundColor: Colors.transparent,
+                    selectedColor: Colors.transparent,
+                    side: BorderSide(color: _channel == k ? Theme.of(context).colorScheme.primary : context.lineColor, width: _channel == k ? 1.6 : 1),
+                    onSelected: (_) => setState(() { _channel = k; _account = null; }),
+                  ),
+                ),
+            ]),
+          );
           if (accounts.isEmpty) {
-            return Center(child: Text('No Instagram accounts connected', style: TextStyle(color: context.mutedColor)));
+            return Column(children: [
+              switcher,
+              Expanded(child: Center(child: Text(_channel == 'facebook' ? 'No Facebook Page connected' : 'No Instagram accounts connected', style: TextStyle(color: context.mutedColor)))),
+            ]);
           }
-          _account ??= accounts.first;
+          if (_account == null || !accounts.any((a) => a['id'] == _account!['id'])) _account = accounts.first;
           final accountId = _account!['id'] as int;
           return Column(
             children: [
+              switcher,
               _AccountPickerBar(accounts: accounts, selected: _account, onSelect: (a) => setState(() => _account = a)),
               Expanded(
                 child: Consumer(
@@ -155,6 +182,21 @@ class _CommentsThreadPageState extends State<_CommentsThreadPage> {
     if (ok) _load();
   }
 
+  /// A private message to the commenter (DM / Messenger) instead of a public reply — one per comment, within 7 days of it.
+  Future<void> _privateReply(String commentId) async {
+    final data = <String, dynamic>{};
+    final ok = await showFormSheet(
+      context,
+      title: 'Reply in private message',
+      submitLabel: 'Send privately',
+      fields: (ctx) => [
+        FText(label: 'Message', required: true, maxLines: 3, hint: 'Sent as a DM — Meta allows one per comment, within 7 days', onSaved: (v) => data['text'] = v),
+      ],
+      onSubmit: () => Api.post('/instagram/accounts/${widget.accountId}/comments/$commentId/private-reply', data: data),
+    );
+    if (ok) _load();
+  }
+
   Future<void> _toggleHide(String commentId, bool currentlyHidden) async {
     final ok = await runAction(context,
         () => Api.post('/instagram/accounts/${widget.accountId}/comments/$commentId/hide', data: {'hide': !currentlyHidden}),
@@ -194,6 +236,7 @@ class _CommentsThreadPageState extends State<_CommentsThreadPage> {
                           _CommentRow(
                             comment: c,
                             onReply: () => _reply('${c['id']}'),
+                            onPrivate: () => _privateReply('${c['id']}'),
                             onToggleHide: () => _toggleHide('${c['id']}', c['hidden'] == true),
                             onDelete: () => _delete('${c['id']}'),
                           ),
@@ -217,9 +260,10 @@ class _CommentsThreadPageState extends State<_CommentsThreadPage> {
 }
 
 class _CommentRow extends StatelessWidget {
-  const _CommentRow({required this.comment, required this.onReply, required this.onToggleHide, required this.onDelete});
+  const _CommentRow({required this.comment, required this.onReply, this.onPrivate, required this.onToggleHide, required this.onDelete});
   final Rec comment;
   final VoidCallback onReply;
+  final VoidCallback? onPrivate;
   final VoidCallback onToggleHide;
   final VoidCallback onDelete;
 
@@ -245,6 +289,7 @@ class _CommentRow extends StatelessWidget {
             const SizedBox(height: 8),
             Row(children: [
               TextButton(onPressed: onReply, child: const Text('Reply')),
+              if (onPrivate != null) TextButton(onPressed: onPrivate, child: const Text('Reply in DM')),
               TextButton(onPressed: onToggleHide, child: Text(hidden ? 'Unhide' : 'Hide')),
               TextButton(onPressed: onDelete, child: const Text('Delete', style: TextStyle(color: AppPalette.danger))),
             ]),

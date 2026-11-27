@@ -7,6 +7,7 @@ import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_inbox_page.dart';
 import 'package:unichat_mobile_app/core/utils/message_label.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
+import 'package:unichat_mobile_app/features/wa_agent/presentation/pages/widget_chats_page.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_inbox_page.dart';
 
 /// "My chats" per channel — only the conversations assigned to the signed-in person. Feeds the round icons on the Sales home
@@ -53,6 +54,11 @@ final myChatChannelsProvider = FutureProvider.autoDispose<Map<String, ChatChanne
 
 /// Tap on a channel's round icon: one source → straight to its chats; several → pick the number / account / widget first.
 Future<void> openChannel(BuildContext context, WidgetRef ref, String key) async {
+  if (key == 'widget') {
+    // the website-chats screen lists every widget's chats (not just those with a lead assigned to me), with All chats / Assigned to me tabs
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WidgetChatsPage()));
+    return;
+  }
   Map<String, ChatChannel> data;
   try {
     data = await ref.refresh(myChatChannelsProvider.future);
@@ -151,13 +157,13 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
           final r = await Api.raw.get('/chat-channels/wa-chat', queryParameters: {if (_sid != null) 'session': _sid, if (q.isNotEmpty) 'q': q});
           rows = _maps((r.data as Map)['data']);
         case 'instagram' || 'messenger':
-          final r = await Api.raw.get('/instagram/conversations', queryParameters: {'mine': 1, 'channel': _key == 'messenger' ? 'facebook' : 'instagram', if (_sid != null && _sid! > 0) 'account_id': _sid});
+          final r = await Api.raw.get('/instagram/conversations', queryParameters: {if (!_allChats) 'mine': 1, 'channel': _key == 'messenger' ? 'facebook' : 'instagram', if (_sid != null && _sid! > 0) 'account_id': _sid});
           rows = _maps((r.data as Map)['data']);
         default:
           if (_sid == null) {
             rows = [];
           } else {
-            final r = await Api.raw.get('/widgets/$_sid/conversations', queryParameters: {'mine': 1});
+            final r = await Api.raw.get('/widgets/$_sid/conversations', queryParameters: {if (!_allChats) 'mine': 1});
             rows = _maps((r.data as Map)['data']);
           }
       }
@@ -230,7 +236,7 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
       appBar: AppBar(title: Text(title)),
       body: Column(children: [
         // WA Cloud: two tabs — all chats, or only the ones assigned to me (the underline marks the open one)
-        if (_key == 'wa_cloud')
+        if (_key == 'wa_cloud' || _key == 'instagram' || _key == 'messenger' || _key == 'widget')
           Row(children: [
             for (final (label, all) in [('All chats', true), ('Assigned to me', false)])
               Expanded(
@@ -274,7 +280,7 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-          child: Align(alignment: Alignment.centerLeft, child: Text(_key == 'wa_cloud' && _allChats ? 'Every chat you can see' : 'Only chats assigned to me', style: TextStyle(fontSize: 11.5, color: context.mutedColor))),
+          child: Align(alignment: Alignment.centerLeft, child: Text(_key != 'wa_chat' && _allChats ? 'Every chat you can see' : 'Only chats assigned to me', style: TextStyle(fontSize: 11.5, color: context.mutedColor))),
         ),
         Expanded(
           child: _error != null
@@ -282,7 +288,7 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
               : _rows == null
                   ? const Center(child: CircularProgressIndicator())
                   : _rows!.isEmpty
-                      ? AppEmptyState(icon: Icons.forum_outlined, title: 'No chats', subtitle: _key == 'wa_cloud' && _allChats ? 'There are no chats here yet.' : 'Nothing is assigned to you here.')
+                      ? AppEmptyState(icon: Icons.forum_outlined, title: 'No chats', subtitle: _key != 'wa_chat' && _allChats ? 'There are no chats here yet.' : 'Nothing is assigned to you here.')
                       : RefreshIndicator(
                           onRefresh: _load,
                           child: ListView.separated(
