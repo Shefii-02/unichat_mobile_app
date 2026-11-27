@@ -380,10 +380,39 @@ class _ThreadPageState extends State<WaCloudThreadPage> {
     final text = _reply.text.trim();
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
-    final ok = await runAction(context, () => Api.post('/conversations/$_id/messages', data: {'body': text}));
+    try {
+      await Api.post('/conversations/$_id/messages', data: {'body': text});
+      if (mounted) _reply.clear();
+    } catch (e) {
+      if (mounted) await _onSendRefused(e);
+    }
     if (!mounted) return;
     setState(() => _sending = false);
-    if (ok) { _reply.clear(); _load(); }
+    _load();   // shows the new message (or the failed one with its reason)
+  }
+
+  /// WhatsApp's own refusal after 24 hours ("re-engagement", code 131047) can't be overridden by us or by paying more — only an approved
+  /// template is accepted then. Offer exactly that; any other error is just shown.
+  Future<void> _onSendRefused(Object e) async {
+    final msg = apiErrorMessage(e);
+    final closed = (e is DioException && e.response?.data is Map && (e.response!.data as Map)['window_closed'] == true) ||
+        msg.contains('24 hours') || msg.toLowerCase().contains('re-engagement');
+    if (!closed) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return;
+    }
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('WhatsApp needs a template'),
+        content: const Text('More than 24 hours have passed since this customer last wrote, so WhatsApp does not accept a normal message — whatever it costs. An approved template is always accepted and starts the conversation again.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send a template')),
+        ],
+      ),
+    );
+    if (go == true && mounted) await _sendTemplate();
   }
 
   /// Photo / video / audio / document: pick it, then send it (the typed text becomes the caption). Allowed any time — after 24 hours
@@ -414,12 +443,15 @@ class _ThreadPageState extends State<WaCloudThreadPage> {
     if (path == null || !mounted) return;
     setState(() => _sending = true);
     final caption = _reply.text.trim();
-    final ok = await runAction(context, () async {
-      await Api.raw.post('/conversations/$_id/media', data: FormData.fromMap({'file': await MultipartFile.fromFile(path!, filename: name), if (caption.isNotEmpty) 'caption': caption}));
-    });
+    try {
+      await Api.raw.post('/conversations/$_id/media', data: FormData.fromMap({'file': await MultipartFile.fromFile(path, filename: name), if (caption.isNotEmpty) 'caption': caption}));
+      if (mounted) _reply.clear();
+    } catch (e) {
+      if (mounted) await _onSendRefused(e);
+    }
     if (!mounted) return;
     setState(() => _sending = false);
-    if (ok) { _reply.clear(); _load(); }
+    _load();
   }
 
   /// Send an approved template — allowed any time (it is what WhatsApp always accepts, including after the 24-hour window).
