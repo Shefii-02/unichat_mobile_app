@@ -437,7 +437,20 @@ class _WaSessionChatRoomPageState extends State<WaSessionChatRoomPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? Center(child: Text("Couldn't load messages — $_error"))
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text("Couldn't load messages — $_error", textAlign: TextAlign.center),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: () { setState(() { _loading = true; _error = null; }); _load(); },
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('Try again'),
+                            ),
+                          ]),
+                        ),
+                      )
                     : _messages.isEmpty
                         ? const Center(child: Text('No messages yet', style: TextStyle(color: AppColors.textLight)))
                         : RefreshIndicator(

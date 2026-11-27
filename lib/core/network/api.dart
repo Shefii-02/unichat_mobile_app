@@ -101,6 +101,14 @@ String apiErrorMessage(Object e) {
       }
       if (data['message'] is String) return data['message'] as String;
     }
+    // 502/503/504 and Cloudflare's 520–524: the server behind it is down, overloaded or unreachable — not something the user did
+    final code = e.response?.statusCode ?? 0;
+    if (code == 502 || code == 503 || code == 504 || (code >= 520 && code <= 524)) {
+      return "The server isn't responding right now ($code). Please try again in a couple of minutes.";
+    }
+    if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) {
+      return 'The server took too long to answer. Please try again.';
+    }
     if (e.type == DioExceptionType.connectionError) {
       return 'No connection. Check your network and try again.';
     }

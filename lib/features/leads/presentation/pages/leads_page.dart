@@ -127,7 +127,9 @@ class _LeadsPageState extends State<LeadsPage> {
     setState(() { _loading = true; _error = null; });
     try {
       // In the Sales workspace the list is only the leads assigned to this person
-      final box = ProviderScope.containerOf(context);
+      // listen: false — the very first load runs inside initState, where subscribing to an inherited widget is not allowed (it threw, so the
+      // first load always ended in "Something went wrong" and only Retry, after the page was built, worked)
+      final box = ProviderScope.containerOf(context, listen: false);
       final myId =
           box.read(activeWorkspaceProvider) == 'sales'
               ? box.read(authProvider).value?.id

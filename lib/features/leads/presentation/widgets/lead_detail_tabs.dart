@@ -1,11 +1,9 @@
 // The lead page's tabs — the same set as the web lead page: Contact & pipeline · Lead information · Chat · Referred by · Assigned staff ·
 // Category & labels · Campaigns (+ Installments, which lives in lead_installments.dart).
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:unichat_mobile_app/features/leads/lead_stage.dart';
-import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
-import 'package:unichat_mobile_app/features/chats/presentation/pages/wa_session_chat_room_page.dart';
+import 'package:unichat_mobile_app/core/utils/message_label.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_inbox_page.dart';
 
@@ -173,40 +171,127 @@ Future<void> openLeadInbox(BuildContext context, Map<String, dynamic> contact) a
   }
 }
 
-/// The lead's WhatsApp Chat (open-wa) conversation, opened in the full WA Chat thread screen: the whole history with every kind of message
-/// (text, photos, video, audio, voice notes, documents, location, contacts, calls) and the full composer to send them.
-Future<void> showLeadWaChat(BuildContext context, int leadId, String title) async {
-  final container = ProviderScope.containerOf(context, listen: false);
-  final apiKey = container.read(authProvider).value?.waContactToken;
-  Map<String, dynamic> d;
-  try {
-    final r = await Api.raw.get('/leads/$leadId/wa-chat', queryParameters: {'limit': 1});
-    d = (r.data as Map).cast<String, dynamic>();
-  } catch (e) {
-    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
-    return;
+/// The lead's WhatsApp Chat (open-wa) thread with a reply box. It goes through our own server (`/leads/{id}/wa-chat`), which talks to the
+/// chat gateway itself — the phone never calls the gateway's public address, so it keeps working when that address is unreachable.
+Future<void> showLeadWaChat(BuildContext context, int leadId, String title) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    builder: (_) => _WaChatSheet(leadId: leadId, title: title),
+  );
+}
+
+class _WaChatSheet extends StatefulWidget {
+  const _WaChatSheet({required this.leadId, required this.title});
+  final int leadId;
+  final String title;
+  @override
+  State<_WaChatSheet> createState() => _WaChatSheetState();
+}
+
+class _WaChatSheetState extends State<_WaChatSheet> {
+  Map<String, dynamic>? _d;
+  String? _error;
+  bool _sending = false;
+  final _text = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
   }
-  if (!context.mounted) return;
-  final session = d['session'] is Map ? (d['session'] as Map).cast<String, dynamic>() : null;
-  if (d['available'] != true || d['chat_id'] == null || session == null) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No WhatsApp Chat conversation with this customer yet.')));
-    return;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
   }
-  if (apiKey == null || apiKey.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WhatsApp Chat is not set up for your account.')));
-    return;
+
+  Future<void> _load() async {
+    try {
+      final r = await Api.raw.get('/leads/${widget.leadId}/wa-chat', queryParameters: {'limit': 100});
+      if (mounted) setState(() { _d = (r.data as Map).cast<String, dynamic>(); _error = null; });
+    } catch (e) {
+      if (mounted) setState(() => _error = apiErrorMessage(e));
+    }
   }
-  await Navigator.of(context).push(MaterialPageRoute(
-    builder: (_) => WaSessionChatRoomPage(
-      sessionName: str(session['session_name'], str(session['name'])),
-      sessionLabel: str(session['name'], str(session['session_name'])),
-      apiKey: apiKey,
-      chatId: str(d['chat_id']),
-      chatName: title,
-      isGroup: false,
-      allChats: const [],
-    ),
-  ));
+
+  Future<void> _send() async {
+    final t = _text.text.trim();
+    final d = _d;
+    if (t.isEmpty || d == null || _sending) return;
+    setState(() => _sending = true);
+    final ok = await runAction(context, () => Api.post('/leads/${widget.leadId}/wa-chat/send', data: {'text': t, 'chat_id': d['chat_id'], 'session_id': (d['session'] as Map?)?['id']}));
+    if (!mounted) return;
+    setState(() => _sending = false);
+    if (ok) { _text.clear(); _load(); }
+  }
+
+  /// The words, or what kind of message it was — never "[unknown]".
+  String _body(Map m) {
+    final c = m['content'];
+    final t = c is Map ? (c['body'] ?? c['text'] ?? c['caption']) : c;
+    if (t != null && '$t'.isNotEmpty) return '$t';
+    final label = messageTypeLabel('${m['type'] ?? 'text'}');
+    return label.isEmpty ? '' : label;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = _d;
+    final msgs = ((d?['messages'] as List?) ?? const []).whereType<Map>().toList();
+    final available = d?['available'] == true;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.85,
+        child: Column(children: [
+          ListTile(
+            title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text(str((d?['session'] as Map?)?['name'], 'WhatsApp Chat')),
+            trailing: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: _error != null
+                ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(_error!, textAlign: TextAlign.center), const SizedBox(height: 10), OutlinedButton.icon(onPressed: () { setState(() => _error = null); _load(); }, icon: const Icon(Icons.refresh_rounded, size: 18), label: const Text('Try again'))])))
+                : d == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : !available
+                        ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('No WhatsApp Chat conversation for this customer yet.', style: TextStyle(color: context.mutedColor))))
+                        : ListView(
+                            padding: const EdgeInsets.all(12),
+                            children: [
+                              for (final m in msgs)
+                                Align(
+                                  alignment: m['direction'] == 'outbound' ? Alignment.centerRight : Alignment.centerLeft,
+                                  child: Container(
+                                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+                                    margin: const EdgeInsets.symmetric(vertical: 3),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(color: m['direction'] == 'outbound' ? const Color(0xFFD9FDD3) : Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.lineColor)),
+                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_body(m)), Text(when(m['created_at']), style: TextStyle(fontSize: 10, color: context.mutedColor))]),
+                                  ),
+                                ),
+                            ],
+                          ),
+          ),
+          if (available)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 8, 8),
+                child: Row(children: [
+                  Expanded(child: TextField(controller: _text, minLines: 1, maxLines: 4, decoration: const InputDecoration(isDense: true, hintText: 'Type a message…'))),
+                  IconButton(onPressed: _sending ? null : _send, icon: _sending ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_rounded)),
+                ]),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
 }
 
 /// Pipeline: the stages as steps; tap one to move the lead there.
