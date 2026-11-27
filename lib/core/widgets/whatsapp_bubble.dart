@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_colors.dart';
 import '../utils/format_utils.dart';
+import '../utils/message_label.dart';
 import 'chat_media_content.dart';
 
 final _urlPattern = RegExp(r'((?:https?://|www\.)[^\s]+)', caseSensitive: false);
@@ -68,6 +69,12 @@ class WhatsAppBubble extends StatelessWidget {
                   style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 13.5, fontStyle: FontStyle.italic))
             else if (type == 'call')
               _callEvent(call, textColor)
+            else if (type == 'masked')
+              Text(messageTypeLabel('masked'), style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 13.5, fontStyle: FontStyle.italic))
+            else if (type == 'contact' || type == 'vcard' || type == 'multi_vcard')
+              _contactCard(body, textColor)
+            else if (type == 'poll')
+              _linkifiedText(body.isEmpty ? messageTypeLabel('poll') : '📊 $body', textColor)
             else if (location != null) ...[
               _locationCard(location, textColor),
             ] else if (isMedia) ...[
@@ -77,7 +84,8 @@ class WhatsAppBubble extends StatelessWidget {
                 _linkifiedText(body, textColor),
               ],
             ] else
-              _linkifiedText(body, textColor),
+              // text — and any kind drawn nowhere else: the words, or what kind of message it was (never an empty bubble / "[unknown]")
+              _linkifiedText(body.isNotEmpty ? body : (type == 'text' || type == 'chat' ? '' : messageTypeLabel(type)), textColor),
             const SizedBox(height: 2),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -159,6 +167,31 @@ class WhatsAppBubble extends StatelessWidget {
         style: TextStyle(color: textColor.withValues(alpha: 0.75), fontSize: 12.5),
       ),
     );
+  }
+
+  /// A shared contact card. The gateway hands the vCard text as the body — show the name and number(s) it holds, tap a number to call.
+  Widget _contactCard(String body, Color textColor) {
+    final lines = body.split(RegExp(r'\r?\n'));
+    final names = <String>[], numbers = <String>[];
+    for (final l in lines) {
+      final u = l.toUpperCase();
+      if (u.startsWith('FN')) { final v = l.contains(':') ? l.substring(l.indexOf(':') + 1).trim() : ''; if (v.isNotEmpty) names.add(v); }
+      if (u.startsWith('TEL') || u.contains('WAID=')) { final v = l.contains(':') ? l.substring(l.indexOf(':') + 1).trim() : ''; if (v.isNotEmpty) numbers.add(v); }
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      CircleAvatar(radius: 18, backgroundColor: textColor.withValues(alpha: 0.12), child: Icon(Icons.person_rounded, color: textColor.withValues(alpha: 0.7))),
+      const SizedBox(width: 10),
+      Flexible(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(names.isNotEmpty ? names.join(', ') : 'Contact', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: textColor)),
+          for (final n in numbers)
+            GestureDetector(
+              onTap: () => launchUrl(Uri.parse('tel:${n.replaceAll(RegExp(r'[^0-9+]'), '')}')),
+              child: Text(n, style: TextStyle(fontSize: 13, color: textColor.withValues(alpha: 0.8), decoration: TextDecoration.underline)),
+            ),
+        ]),
+      ),
+    ]);
   }
 
   Widget _locationCard(Map<String, dynamic> location, Color textColor) {

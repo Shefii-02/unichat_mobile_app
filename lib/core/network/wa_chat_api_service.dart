@@ -472,6 +472,21 @@ class WaChatApiService {
     );
   }
 
+  /// `POST /api/sessions/:id/messages/send-contact` — a contact card (name + number).
+  static Future<void> sendContact(
+    String sessionId,
+    String apiKey, {
+    required String chatId,
+    required String contactName,
+    required String contactNumber,
+  }) {
+    return _dio.post(
+      '/api/sessions/${Uri.encodeComponent(sessionId)}/messages/send-contact',
+      data: {'chatId': chatId, 'contactName': contactName, 'contactNumber': contactNumber},
+      options: _auth(apiKey),
+    );
+  }
+
   /// `POST /api/sessions/:id/messages/send-location`.
   static Future<void> sendLocation(
     String sessionId,

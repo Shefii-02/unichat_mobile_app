@@ -49,6 +49,8 @@ Future<bool> showWaAttachmentSheet(
         return await _recordAndSendAudio(context, sessionName, apiKey, chatId);
       case _AttachAction.location:
         return await _shareLocation(context, sessionName, apiKey, chatId);
+      case _AttachAction.contact:
+        return await _shareContact(context, sessionName, apiKey, chatId);
       case _AttachAction.catalog:
         return await _shareCatalogItem(context, sessionName, apiKey, chatId);
       case _AttachAction.callLink:
@@ -62,7 +64,7 @@ Future<bool> showWaAttachmentSheet(
   }
 }
 
-enum _AttachAction { camera, gallery, video, document, audio, voice, location, catalog, callLink }
+enum _AttachAction { camera, gallery, video, document, audio, voice, location, contact, catalog, callLink }
 
 class _AttachmentGrid extends StatelessWidget {
   const _AttachmentGrid();
@@ -75,6 +77,7 @@ class _AttachmentGrid extends StatelessWidget {
     (_AttachAction.audio, Icons.headphones_rounded, 'Audio file', Color(0xFF12A594)),
     (_AttachAction.voice, Icons.mic_rounded, 'Record voice', Color(0xFFDC2626)),
     (_AttachAction.location, Icons.location_on_rounded, 'Location', Color(0xFF16A34A)),
+    (_AttachAction.contact, Icons.person_rounded, 'Contact', Color(0xFF0EA5E9)),
     (_AttachAction.catalog, Icons.storefront_rounded, 'Catalog', Color(0xFFD97706)),
     (_AttachAction.callLink, Icons.call_rounded, 'Call link', Color(0xFF075E54)),
   ];
@@ -484,4 +487,31 @@ String? _firstListingImageUrl(Object? media) {
     if (url is String && url.isNotEmpty) return url;
   }
   return null;
+}
+
+
+/// Share a contact card: ask for the name and number, then send it through the gateway.
+Future<bool> _shareContact(BuildContext context, String sessionName, String apiKey, String chatId) async {
+  final name = TextEditingController();
+  final number = TextEditingController();
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Share a contact'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: name, autofocus: true, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Name')),
+        const SizedBox(height: 8),
+        TextField(controller: number, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number with country code', hintText: '919876543210')),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send')),
+      ],
+    ),
+  );
+  final n = name.text.trim(), p = number.text.replaceAll(RegExp(r'[^0-9+]'), '');
+  Future.delayed(const Duration(milliseconds: 400), () { name.dispose(); number.dispose(); });   // after the dialog has finished closing
+  if (ok != true || n.isEmpty || p.length < 7) return false;
+  await WaChatApiService.sendContact(sessionName, apiKey, chatId: chatId, contactName: n, contactNumber: p);
+  return true;
 }

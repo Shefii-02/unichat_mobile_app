@@ -322,15 +322,18 @@ class _WaSessionChatsPageState extends ConsumerState<WaSessionChatsPage> {
     )).then((_) => _loadChats(force: true));
   }
 
-  _ChatTab _tab = _ChatTab.all;
+  // Two tabs — Unread (with its count) and All chats — plus one optional filter that narrows either: Individual · Group · Mine · Unassigned.
+  _ChatTab _tab = _ChatTab.all;        // all | unread
+  _ChatTab? _filter;                    // individual | group | mine | unassigned | null
+
+  int get _unreadCount => _chats.where((c) => (num.tryParse('${c['unreadCount'] ?? 0}') ?? 0) > 0).length;
 
   List<Rec> get _filteredChats {
     var list = _chats;
-    switch (_tab) {
-      case _ChatTab.all:
-        break;
-      case _ChatTab.unread:
-        list = list.where((c) => (num.tryParse('${c['unreadCount'] ?? 0}') ?? 0) > 0).toList();
+    if (_tab == _ChatTab.unread) {
+      list = list.where((c) => (num.tryParse('${c['unreadCount'] ?? 0}') ?? 0) > 0).toList();
+    }
+    switch (_filter) {
       case _ChatTab.individual:
         list = list.where((c) => c['isGroup'] != true).toList();
       case _ChatTab.group:
@@ -339,6 +342,8 @@ class _WaSessionChatsPageState extends ConsumerState<WaSessionChatsPage> {
         list = list.where((c) => _chatMatchesLeads(c, _minePhones)).toList();
       case _ChatTab.unassigned:
         list = list.where((c) => _chatMatchesLeads(c, _unassignedPhones)).toList();
+      default:
+        break;
     }
     if (_search.isEmpty) return list;
     final q = _search.toLowerCase();
@@ -389,19 +394,37 @@ class _WaSessionChatsPageState extends ConsumerState<WaSessionChatsPage> {
               ),
             ),
           ),
+          // the two tabs: the open one is underlined
+          Row(children: [
+            for (final (t, label) in [(_ChatTab.unread, 'Unread · $_unreadCount'), (_ChatTab.all, 'All chats')])
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _tab = t),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _tab == t ? AppColors.primary : Colors.transparent, width: 2.5))),
+                    child: Text(label, style: TextStyle(fontWeight: _tab == t ? FontWeight.w800 : FontWeight.w500, color: _tab == t ? AppColors.textPrimary : AppColors.textLight)),
+                  ),
+                ),
+              ),
+          ]),
+          // filters that narrow either tab (tap again to clear)
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Row(
               children: [
-                for (final t in _ChatTab.values) ...[
-                  ChoiceChip(
-                    label: Text(_tabLabel(t)),
-                    selected: _tab == t,
-                    onSelected: (_) {
-                      setState(() => _tab = t);
-                      if (t == _ChatTab.mine && !_mineFetched && !_mineLoading) _loadMine();
-                      if (t == _ChatTab.unassigned && !_unassignedFetched && !_unassignedLoading) _loadUnassigned();
+                for (final t in const [_ChatTab.individual, _ChatTab.group, _ChatTab.mine, _ChatTab.unassigned]) ...[
+                  FilterChip(
+                    label: Text(_tabLabel(t), style: const TextStyle(fontSize: 12)),
+                    selected: _filter == t,
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (v) {
+                      setState(() => _filter = v ? t : null);
+                      if (v && t == _ChatTab.mine && !_mineFetched && !_mineLoading) _loadMine();
+                      if (v && t == _ChatTab.unassigned && !_unassignedFetched && !_unassignedLoading) _loadUnassigned();
                     },
                   ),
                   const SizedBox(width: 8),
@@ -417,7 +440,7 @@ class _WaSessionChatsPageState extends ConsumerState<WaSessionChatsPage> {
 
   Widget _chatsBody() {
     if (_loadingChats) return const Center(child: CircularProgressIndicator());
-    if ((_tab == _ChatTab.mine && _mineLoading) || (_tab == _ChatTab.unassigned && _unassignedLoading)) {
+    if ((_filter == _ChatTab.mine && _mineLoading) || (_filter == _ChatTab.unassigned && _unassignedLoading)) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_chatsError != null) {
@@ -446,10 +469,10 @@ class _WaSessionChatsPageState extends ConsumerState<WaSessionChatsPage> {
     }
     final chats = _filteredChats;
     if (chats.isEmpty) {
-      final message = switch (_tab) {
+      final message = switch (_filter) {
         _ChatTab.mine => 'No chats assigned to you.',
         _ChatTab.unassigned => 'No unassigned new leads.',
-        _ => 'No chats yet',
+        _ => _tab == _ChatTab.unread ? 'No unread chats.' : 'No chats yet',
       };
       return Center(child: Text(message, style: const TextStyle(color: AppColors.textLight)));
     }

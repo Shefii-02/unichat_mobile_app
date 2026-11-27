@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:unichat_mobile_app/features/leads/presentation/widgets/lead_detail_tabs.dart' show OutlinePills;
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/core/widgets/app_empty_state.dart';
 import 'package:unichat_mobile_app/features/instagram/presentation/pages/instagram_inbox_page.dart';
+import 'package:unichat_mobile_app/core/utils/message_label.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/wa_cloud/presentation/pages/wa_cloud_inbox_page.dart';
 
@@ -112,6 +114,10 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
   List<Map<String, dynamic>>? _rows;
   String? _error;
   final _search = TextEditingController();
+  bool _allChats = false;   // WA Cloud only: false = assigned to me, true = every chat I may see
+  String _sub = 'all';      // WA Cloud status tab: all · unread · unassigned (All chats only) · read · closed
+  Map<String, dynamic> _stateCounts = {};
+  Map<String, dynamic> _counts = {};
 
   String get _key => widget.channel.key;
   int? get _sid => widget.source?.id;
@@ -136,8 +142,11 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
       List<Map<String, dynamic>> rows;
       switch (_key) {
         case 'wa_cloud':
-          final r = await Api.raw.get('/conversations', queryParameters: {'mine': 1, 'per_page': 100, if (_sid != null && _sid! > 0) 'wa_phone_number_id': _sid, if (q.isNotEmpty) 'search': q});
+          final r = await Api.raw.get('/conversations', queryParameters: {if (!_allChats) 'mine': 1, if (_sub == 'unassigned' && _allChats) 'unassigned': 1, if (_sub == 'starred') 'starred': 1, if (_sub == 'unread' || _sub == 'read' || _sub == 'closed') 'state': _sub, 'per_page': 100, if (_sid != null && _sid! > 0) 'wa_phone_number_id': _sid, if (q.isNotEmpty) 'search': q});
           rows = _maps((r.data as Map)['conversations']);
+          final body = r.data as Map;
+          if (body['state_counts'] is Map) _stateCounts = Map<String, dynamic>.from(body['state_counts'] as Map);
+          if (body['counts'] is Map) _counts = Map<String, dynamic>.from(body['counts'] as Map);
         case 'wa_chat':
           final r = await Api.raw.get('/chat-channels/wa-chat', queryParameters: {if (_sid != null) 'session': _sid, if (q.isNotEmpty) 'q': q});
           rows = _maps((r.data as Map)['data']);
@@ -166,9 +175,26 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
     switch (_key) {
       case 'wa_cloud':
         final last = r['last_message'] is Map ? (r['last_message'] as Map).cast<String, dynamic>() : const <String, dynamic>{};
+        // the last message's text — `content` is a map ({body: …}), never print it raw
+        String lastText() {
+          final c = last['content'];
+          if (c is Map) {
+            final b = c['body'] ?? c['text'] ?? c['caption'];
+            if (b != null && '$b'.isNotEmpty) return '$b';
+            if (c['template'] != null) return '[Template] ${c['template']}';
+          } else if (c != null && '$c'.isNotEmpty) {
+            return '$c';
+          }
+          final t = str(last['body'] ?? last['text']);
+          if (t.isNotEmpty) return t;
+          final type = str(last['type']);
+          return messageTypeLabel(type);
+        }
+        final nm = str(r['contact_name']).isNotEmpty ? str(r['contact_name']) : (r['contact'] is Map ? str((r['contact'] as Map)['name']) : '');
+        final ph = str(r['phone']);
         return (
-          title: str(r['contact_name']).isNotEmpty ? str(r['contact_name']) : (r['contact'] is Map ? str((r['contact'] as Map)['name']) : '').isNotEmpty ? str((r['contact'] as Map)['name']) : str(r['phone']),
-          sub: str(last['body'] ?? last['content'] ?? last['text'] ?? r['phone']),
+          title: nm.isEmpty ? ph : (ph.isEmpty || nm == ph ? nm : '$nm · $ph'),
+          sub: lastText(),
           unread: (r['unread_count'] as num?)?.toInt() ?? 0,
           at: when(r['last_message_at']),
         );
@@ -203,6 +229,40 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: Column(children: [
+        // WA Cloud: two tabs — all chats, or only the ones assigned to me (the underline marks the open one)
+        if (_key == 'wa_cloud')
+          Row(children: [
+            for (final (label, all) in [('All chats', true), ('Assigned to me', false)])
+              Expanded(
+                child: InkWell(
+                  onTap: () { if (_allChats != all) { setState(() { _allChats = all; _rows = null; if (!all && _sub == 'unassigned') _sub = 'all'; }); _load(); } },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _allChats == all ? Theme.of(context).colorScheme.primary : Colors.transparent, width: 2.5))),
+                    child: Text(label, style: TextStyle(fontWeight: _allChats == all ? FontWeight.w800 : FontWeight.w500, color: _allChats == all ? null : context.mutedColor)),
+                  ),
+                ),
+              ),
+          ]),
+        // WA Cloud status tabs with their counts — Unread · Unassigned (All chats only) · Read · Closed
+        if (_key == 'wa_cloud')
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Builder(builder: (_) {
+              final keys = ['all', 'unread', if (_allChats) 'unassigned', 'starred', 'read', 'closed'];
+              String label(String k) {
+                final n = k == 'unassigned' ? _counts['unassigned'] : k == 'starred' ? _counts['starred'] : _stateCounts[k];
+                final name = {'all': 'All', 'unread': 'Unread', 'unassigned': 'Unassigned', 'starred': '★ Starred', 'read': 'Read', 'closed': 'Closed'}[k]!;
+                return n == null ? name : '$name $n';
+              }
+              return OutlinePills(
+                labels: [for (final k in keys) label(k)],
+                index: keys.indexOf(_sub).clamp(0, keys.length - 1),
+                onChanged: (i) { setState(() { _sub = keys[i]; _rows = null; }); _load(); },
+              );
+            }),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
           child: TextField(
@@ -214,7 +274,7 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-          child: Align(alignment: Alignment.centerLeft, child: Text('Only chats assigned to me', style: TextStyle(fontSize: 11.5, color: context.mutedColor))),
+          child: Align(alignment: Alignment.centerLeft, child: Text(_key == 'wa_cloud' && _allChats ? 'Every chat you can see' : 'Only chats assigned to me', style: TextStyle(fontSize: 11.5, color: context.mutedColor))),
         ),
         Expanded(
           child: _error != null
@@ -222,7 +282,7 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
               : _rows == null
                   ? const Center(child: CircularProgressIndicator())
                   : _rows!.isEmpty
-                      ? const AppEmptyState(icon: Icons.forum_outlined, title: 'No chats', subtitle: 'Nothing is assigned to you here.')
+                      ? AppEmptyState(icon: Icons.forum_outlined, title: 'No chats', subtitle: _key == 'wa_cloud' && _allChats ? 'There are no chats here yet.' : 'Nothing is assigned to you here.')
                       : RefreshIndicator(
                           onRefresh: _load,
                           child: ListView.separated(
@@ -236,7 +296,10 @@ class _MyChatsPageState extends ConsumerState<MyChatsPage> {
                                 title: Text(f.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
                                 subtitle: Text(f.sub, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                  Text(f.at, style: TextStyle(fontSize: 11, color: context.mutedColor)),
+                                  Row(mainAxisSize: MainAxisSize.min, children: [
+                                    if (_rows![i]['starred'] == true) const Padding(padding: EdgeInsets.only(right: 3), child: Icon(Icons.star_rounded, size: 14, color: Color(0xFFF59E0B))),
+                                    Text(f.at, style: TextStyle(fontSize: 11, color: context.mutedColor)),
+                                  ]),
                                   if (f.unread > 0)
                                     Container(
                                       margin: const EdgeInsets.only(top: 4),

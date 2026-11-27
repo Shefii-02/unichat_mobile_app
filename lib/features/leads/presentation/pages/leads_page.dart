@@ -41,6 +41,9 @@ class _LeadsPageState extends State<LeadsPage> {
   List<dynamic> _leads = [];
   bool _loading = true;
   String? _stage;
+  int _seq = 0;               // numbers each request, so a slow older answer never overwrites a newer one
+  String? _error;             // why the last load failed (shown with a Retry button instead of a silent empty list)
+  bool? _tabActive;           // whether this tab is the one on screen (the bottom-nav tabs stay alive underneath)
   bool _onlyStarred = false;   // show only the leads I starred
   int _page = 1;
   bool _hasMore = true;
@@ -52,7 +55,7 @@ class _LeadsPageState extends State<LeadsPage> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(reset: true);
     _loadCounts();
     // the tab stays alive when the workspace is switched on Home, so reload with the new scope
     _wsSub = ProviderScope.containerOf(context, listen: false).listen<String?>(
@@ -95,6 +98,19 @@ class _LeadsPageState extends State<LeadsPage> {
     } catch (_) {}
   }
 
+  // The Leads tab lives on in the bottom bar after it was built. When it comes back on screen (e.g. tapping "My leads" on Home), reload so
+  // it never shows a list that was empty or stale from before.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    if (_tabActive == false && active) {
+      _load(reset: true);
+      _loadCounts();
+    }
+    _tabActive = active;
+  }
+
   @override
   void dispose() {
     _wsSub?.close();
@@ -107,7 +123,8 @@ class _LeadsPageState extends State<LeadsPage> {
       _page = 1;
       _leads = [];
     }
-    setState(() => _loading = true);
+    final mine = ++_seq;
+    setState(() { _loading = true; _error = null; });
     try {
       // In the Sales workspace the list is only the leads assigned to this person
       final box = ProviderScope.containerOf(context);
@@ -128,6 +145,7 @@ class _LeadsPageState extends State<LeadsPage> {
         '/leads',
         queryParameters: params,
       );
+      if (!mounted || mine != _seq) return;   // a newer request has started — this answer is out of date
       final data = res.data as Map<String, dynamic>;
       final items = (data['data'] as List?) ?? [];
       setState(() {
@@ -135,8 +153,8 @@ class _LeadsPageState extends State<LeadsPage> {
         _hasMore = items.isNotEmpty;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted && mine == _seq) setState(() { _loading = false; _error = apiErrorMessage(e); });
     }
   }
 
@@ -235,6 +253,14 @@ class _LeadsPageState extends State<LeadsPage> {
               child:
                   _loading && _leads.isEmpty
                       ? const Center(child: CircularProgressIndicator())
+                      : _leads.isEmpty && _error != null
+                      ? Center(
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: context.mutedColor)),
+                          const SizedBox(height: 8),
+                          TextButton(onPressed: () => _load(reset: true), child: const Text('Retry')),
+                        ]),
+                      )
                       : _leads.isEmpty
                       ? AppEmptyState(
                         icon: Icons.people_outline,
@@ -416,10 +442,10 @@ class _LeadsPageState extends State<LeadsPage> {
                 _load(reset: true);
               },
               showCheckmark: false,
-              backgroundColor: context.altSurface,
-              selectedColor: const Color(0xFFFEF3C7),
-              side: BorderSide.none,
-              labelStyle: TextStyle(color: _onlyStarred ? const Color(0xFF92400E) : context.mutedColor, fontSize: 11.5, fontWeight: FontWeight.w500),
+              backgroundColor: Colors.transparent,
+              selectedColor: Colors.transparent,
+              side: BorderSide(color: _onlyStarred ? const Color(0xFFF59E0B) : context.lineColor, width: _onlyStarred ? 1.6 : 1),
+              labelStyle: TextStyle(color: _onlyStarred ? const Color(0xFF92400E) : context.mutedColor, fontSize: 11.5, fontWeight: _onlyStarred ? FontWeight.w700 : FontWeight.w500),
             );
           }
           final f = _stageFilters[i - 1];
@@ -432,13 +458,14 @@ class _LeadsPageState extends State<LeadsPage> {
               setState(() => _stage = f.$2);
               _load(reset: true);
             },
-            selectedColor: theme.colorScheme.onSurface,
-            backgroundColor: context.altSurface,
-            side: BorderSide.none,
+            showCheckmark: false,
+            selectedColor: Colors.transparent,        // the chosen tab is marked by its border, not a filled background
+            backgroundColor: Colors.transparent,
+            side: BorderSide(color: sel ? theme.colorScheme.onSurface : context.lineColor, width: sel ? 1.6 : 1),
             labelStyle: TextStyle(
-              color: sel ? theme.colorScheme.surface : context.mutedColor,
+              color: sel ? theme.colorScheme.onSurface : context.mutedColor,
               fontSize: 11.5,
-              fontWeight: FontWeight.w500,
+              fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
             ),
           );
         },
@@ -637,9 +664,11 @@ Future<bool> showNewLeadSheet(BuildContext context) async {
     }
   }
   if (!context.mounted) return false;
+  final myId = ProviderScope.containerOf(context, listen: false).read(authProvider).value?.id;   // read before any await below
   final data = <String, dynamic>{};
   final who = LeadContactState();
   final form = LeadFormState();
+  bool addToMine = true;   // new leads go to "My leads" unless another staff member is picked
   int? openLeadId;   // set when the customer already has an open lead and the staff chose to go to it
   final ok = await showFormSheet(
     context,
@@ -658,6 +687,16 @@ Future<bool> showNewLeadSheet(BuildContext context) async {
             options: const ['low', 'medium', 'high'],
             initial: 'medium',
             onSaved: (v) => data['priority'] = v ?? 'medium',
+          ),
+          StatefulBuilder(
+            builder: (_, setS) => CheckboxListTile(
+              value: addToMine,
+              onChanged: (v) => setS(() => addToMine = v ?? true),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('Add to my leads', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Assigned to you — it appears under My leads. Picking another staff member below overrides this.', style: TextStyle(fontSize: 11.5)),
+            ),
           ),
           if (staff.isNotEmpty)
             FSelect<Map<String, dynamic>>(
@@ -680,6 +719,8 @@ Future<bool> showNewLeadSheet(BuildContext context) async {
       data.addAll(form.originData());
       if (form.categories.isNotEmpty) data['categories'] = form.categories;
       if (form.itemId != null) data['listing_id'] = form.itemId;
+      // "Add to my leads": assign to me unless another staff member was chosen
+      if (addToMine && data['assigned_to'] == null && myId != null) data['assigned_to'] = myId;
       try {
         await Api.post('/leads', data: data);
       } on DioException catch (e) {
@@ -710,16 +751,36 @@ Future<bool> showNewLeadSheet(BuildContext context) async {
 Future<int?> _askOpenExistingLead(BuildContext context, Map<String, dynamic> lead, {required String customer, String defaultNote = ''}) {
   final id = (lead['id'] as num).toInt();
   final owner = lead['assigned_to'] is Map ? '${(lead['assigned_to'] as Map)['name']}' : null;
-  final mine = lead['mine'] == true, canView = lead['can_view'] != false;
+  final mine = lead['mine'] == true, canView = lead['can_view'] != false, claimable = lead['claimable'] == true;
   final note = TextEditingController(text: defaultNote);
-  bool saving = false, saved = false;
+  bool saving = false, saved = false, taken = false, opening = false;   // taken: an unowned lead has been assigned to me
   return showDialog<int?>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+      // nobody owns it yet → assign it to me first (needed to open it or write on it), once
+      Future<void> claimIfUnowned() async {
+        if (claimable && !taken) {
+          await Api.post('/leads/$id/claim');
+          taken = true;
+        }
+      }
+
+      Future<void> openIt() async {
+        setS(() => opening = true);
+        try {
+          await claimIfUnowned();
+          if (ctx.mounted) Navigator.pop(ctx, id);
+        } catch (e) {
+          setS(() => opening = false);
+          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+        }
+      }
+
       Future<void> saveNote() async {
         if (note.text.trim().isEmpty) return;
         setS(() => saving = true);
         try {
+          await claimIfUnowned();
           await Api.post('/leads/$id/notes', data: {'content': 'New enquiry: ${note.text.trim()}'});
           setS(() { saved = true; saving = false; });
         } catch (e) {
@@ -737,7 +798,9 @@ Future<int?> _askOpenExistingLead(BuildContext context, Map<String, dynamic> lea
             const SizedBox(height: 10),
             if (!canView)
               _dupNotice('This lead belongs to ${owner ?? 'another staff member'} and you can\'t open it. Ask them or a team head to add this enquiry.', const Color(0xFFDC2626))
-            else if (!mine)
+            else if (claimable && !taken)
+              _dupNotice('This lead has no owner yet. Opening it (or saving a note on it) assigns it to you.', const Color(0xFF2563EB))
+            else if (!mine && !taken)
               _dupNotice('This lead is not assigned to you${owner != null ? ' — it belongs to $owner' : ' — it has no owner yet'}. You can still open it and add what the customer needs.', const Color(0xFFD97706)),
             if (canView) ...[
               const SizedBox(height: 10),
@@ -755,11 +818,14 @@ Future<int?> _askOpenExistingLead(BuildContext context, Map<String, dynamic> lea
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('No')),
-          FilledButton(onPressed: canView ? () => Navigator.pop(ctx, id) : null, child: const Text('Yes, open lead')),
+          FilledButton(onPressed: canView && !opening ? openIt : null, child: Text(opening ? 'Opening…' : (claimable && !taken ? 'Yes, open & assign to me' : 'Yes, open lead'))),
         ],
       );
     }),
-  ).whenComplete(note.dispose);
+  ).whenComplete(() {
+    // the dialog is still sliding out (its note field still reads this controller) — dispose after it has gone
+    Future.delayed(const Duration(milliseconds: 500), note.dispose);
+  });
 }
 
 Widget _dupNotice(String text, Color c) => Container(
