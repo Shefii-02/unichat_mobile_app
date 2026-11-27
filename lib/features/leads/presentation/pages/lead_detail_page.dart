@@ -64,6 +64,21 @@ class LeadDetailPage extends ConsumerWidget {
             ],
           ),
           actions: [
+            // my star on this lead — tap to mark / unmark it
+            IconButton(
+              tooltip: async.value?['starred'] == true ? 'Starred — tap to unstar' : 'Star this lead',
+              icon: Icon(
+                async.value?['starred'] == true ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: async.value?['starred'] == true ? const Color(0xFFF59E0B) : null,
+              ),
+              onPressed: async.value == null
+                  ? null
+                  : () async {
+                      final on = async.value?['starred'] == true;
+                      final ok = await runAction(context, () => Api.put('/leads/$id/star', data: {'starred': !on}), success: on ? 'Star removed' : 'Starred');
+                      if (ok) ref.invalidate(_leadProvider(id));
+                    },
+            ),
             IconButton(icon: const Icon(Icons.add_call), tooltip: 'Log activity', onPressed: () => _logActivity(context, ref)),
             if (PermissionGuard.can('leads.manage'))
               PopupMenuButton<String>(

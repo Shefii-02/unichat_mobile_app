@@ -17,10 +17,22 @@ class FlowexaApp extends ConsumerStatefulWidget {
   ConsumerState<FlowexaApp> createState() => _FlowexaAppState();
 }
 
-class _FlowexaAppState extends ConsumerState<FlowexaApp> {
+class _FlowexaAppState extends ConsumerState<FlowexaApp> with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && ref.read(authProvider).value != null) PushService.instance.resync();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ref.read(heartbeatServiceProvider).start();
     // See DioClient.onAuthFailure's doc comment — this is what actually gets the user
     // bounced to device re-login (QR/PIN) the moment a request proves their token is dead,

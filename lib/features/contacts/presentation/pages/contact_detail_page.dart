@@ -276,7 +276,7 @@ class ContactDetailPage extends ConsumerWidget {
       title: 'New lead for ${str(c['name'] ?? c['phone'])}',
       submitLabel: 'Create',
       fields: (ctx) => [
-        FSelect<String>(
+        FRadio<String>(
           label: 'Priority',
           options: const ['low', 'medium', 'high'],
           initial: 'medium',

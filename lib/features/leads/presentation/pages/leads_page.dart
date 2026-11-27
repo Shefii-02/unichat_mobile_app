@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/features/auth/presentation/providers/auth_provider.dart';
@@ -40,6 +41,7 @@ class _LeadsPageState extends State<LeadsPage> {
   List<dynamic> _leads = [];
   bool _loading = true;
   String? _stage;
+  bool _onlyStarred = false;   // show only the leads I starred
   int _page = 1;
   bool _hasMore = true;
   final _searchCtrl = TextEditingController();
@@ -118,6 +120,7 @@ class _LeadsPageState extends State<LeadsPage> {
         if (myId != null) 'assigned_to': myId,
         if (widget.source != null) 'source': widget.source,
         if (_stage != null) 'stage': _stage,
+        if (_onlyStarred) 'starred': 1,
         if (_searchCtrl.text.trim().isNotEmpty)
           'search': _searchCtrl.text.trim(),
       };
@@ -400,10 +403,26 @@ class _LeadsPageState extends State<LeadsPage> {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         scrollDirection: Axis.horizontal,
-        itemCount: _stageFilters.length,
+        itemCount: _stageFilters.length + 1,
         separatorBuilder: (_, __) => const SizedBox(width: 6),
         itemBuilder: (_, i) {
-          final f = _stageFilters[i];
+          if (i == 0) {
+            return FilterChip(
+              avatar: Icon(_onlyStarred ? Icons.star_rounded : Icons.star_outline_rounded, size: 16, color: _onlyStarred ? const Color(0xFFF59E0B) : context.mutedColor),
+              label: const Text('Starred'),
+              selected: _onlyStarred,
+              onSelected: (v) {
+                setState(() => _onlyStarred = v);
+                _load(reset: true);
+              },
+              showCheckmark: false,
+              backgroundColor: context.altSurface,
+              selectedColor: const Color(0xFFFEF3C7),
+              side: BorderSide.none,
+              labelStyle: TextStyle(color: _onlyStarred ? const Color(0xFF92400E) : context.mutedColor, fontSize: 11.5, fontWeight: FontWeight.w500),
+            );
+          }
+          final f = _stageFilters[i - 1];
           final sel = _stage == f.$2;
           final theme = Theme.of(context);
           return ChoiceChip(
@@ -448,6 +467,20 @@ class _LeadsPageState extends State<LeadsPage> {
     return '${d.day} ${m[d.month - 1]}';
   }
 
+  /// Star / unstar a lead for myself: the star flips at once and is put back if the server refuses.
+  Future<void> _toggleStar(Map<String, dynamic> lead) async {
+    final next = lead['starred'] != true;
+    setState(() => lead['starred'] = next);
+    try {
+      await Api.put('/leads/${lead['id']}/star', data: {'starred': next});
+      if (!next && _onlyStarred && mounted) setState(() => _leads.removeWhere((l) => l is Map && l['id'] == lead['id']));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => lead['starred'] = !next);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+    }
+  }
+
   Widget _leadRow(Map<String, dynamic> lead) {
     final contact = lead['contact'] as Map<String, dynamic>?;
     final name = contact?['name'] as String? ?? 'Unknown';
@@ -472,6 +505,18 @@ class _LeadsPageState extends State<LeadsPage> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
+            InkResponse(
+              onTap: () => _toggleStar(lead),
+              radius: 20,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Icon(
+                  lead['starred'] == true ? Icons.star_rounded : Icons.star_outline_rounded,
+                  size: 24,
+                  color: lead['starred'] == true ? const Color(0xFFF59E0B) : context.mutedColor,
+                ),
+              ),
+            ),
             CircleAvatar(
               radius: 20,
               backgroundColor: tint.$1,
@@ -595,6 +640,7 @@ Future<bool> showNewLeadSheet(BuildContext context) async {
   final data = <String, dynamic>{};
   final who = LeadContactState();
   final form = LeadFormState();
+  int? openLeadId;   // set when the customer already has an open lead and the staff chose to go to it
   final ok = await showFormSheet(
     context,
     title: 'New lead',
@@ -605,8 +651,9 @@ Future<bool> showNewLeadSheet(BuildContext context) async {
           LeadOriginField(
             state: form,
           ), // first: which number / account / campaign it came from
+          LeadItemField(state: form),
           LeadCategoriesField(state: form),
-          FSelect<String>(
+          FRadio<String>(
             label: 'Priority',
             options: const ['low', 'medium', 'high'],
             initial: 'medium',
@@ -632,10 +679,92 @@ Future<bool> showNewLeadSheet(BuildContext context) async {
       data['contact_id'] = await who.save();
       data.addAll(form.originData());
       if (form.categories.isNotEmpty) data['categories'] = form.categories;
-      await Api.post('/leads', data: data);
+      if (form.itemId != null) data['listing_id'] = form.itemId;
+      try {
+        await Api.post('/leads', data: data);
+      } on DioException catch (e) {
+        final body = e.response?.data;
+        final existing = body is Map && body['error_code'] == 'duplicate_lead' ? body['existing_lead'] : null;
+        if (existing is! Map || !context.mounted) rethrow;
+        // the customer already has an open lead: tell who owns it, let staff note what the customer needs, and ask whether to open it
+        final choice = await _askOpenExistingLead(context, Map<String, dynamic>.from(existing),
+            customer: who.name.text.trim().isEmpty ? who.phone.text.trim() : who.name.text.trim(), defaultNote: '${data['notes'] ?? ''}');
+        if (choice == null) rethrow;      // "No": stay on the form with the usual message
+        openLeadId = choice;
+      }
     },
   );
-  who.dispose();
-  form.dispose();
+  if (ok && openLeadId != null && context.mounted) context.push('/lead-detail/$openLeadId');
+  // The sheet is still sliding out (and its fields still reading these controllers) the moment the future completes —
+  // disposing right now crashes the closing animation. Let it finish first.
+  Future.delayed(const Duration(milliseconds: 500), () {
+    who.dispose();
+    form.dispose();
+  });
   return ok;
 }
+
+
+/// "This customer already has an open lead": who owns it, a warning when it isn't the user's, a note box for what the customer needs now
+/// (saved as an activity on that lead) and "Open that lead?". Returns the lead id when the user says Yes, null for No.
+Future<int?> _askOpenExistingLead(BuildContext context, Map<String, dynamic> lead, {required String customer, String defaultNote = ''}) {
+  final id = (lead['id'] as num).toInt();
+  final owner = lead['assigned_to'] is Map ? '${(lead['assigned_to'] as Map)['name']}' : null;
+  final mine = lead['mine'] == true, canView = lead['can_view'] != false;
+  final note = TextEditingController(text: defaultNote);
+  bool saving = false, saved = false;
+  return showDialog<int?>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+      Future<void> saveNote() async {
+        if (note.text.trim().isEmpty) return;
+        setS(() => saving = true);
+        try {
+          await Api.post('/leads/$id/notes', data: {'content': 'New enquiry: ${note.text.trim()}'});
+          setS(() { saved = true; saving = false; });
+        } catch (e) {
+          setS(() => saving = false);
+          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+        }
+      }
+
+      return AlertDialog(
+        title: const Text('Already an open lead'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(customer.isEmpty ? 'This customer' : customer, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('Stage: ${'${lead['stage']}'.replaceAll('_', ' ')}${lead['item'] != null ? ' · Product / service: ${lead['item']}' : ''} · Assigned to: ${owner ?? 'nobody yet'}${mine ? ' (you)' : ''}', style: const TextStyle(fontSize: 12.5)),
+            const SizedBox(height: 10),
+            if (!canView)
+              _dupNotice('This lead belongs to ${owner ?? 'another staff member'} and you can\'t open it. Ask them or a team head to add this enquiry.', const Color(0xFFDC2626))
+            else if (!mine)
+              _dupNotice('This lead is not assigned to you${owner != null ? ' — it belongs to $owner' : ' — it has no owner yet'}. You can still open it and add what the customer needs.', const Color(0xFFD97706)),
+            if (canView) ...[
+              const SizedBox(height: 10),
+              const Text('What does the customer need now?', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              TextField(controller: note, maxLines: 3, onChanged: (_) => setS(() => saved = false), decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Saved as an activity on that lead')),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(onPressed: saving || saved || note.text.trim().isEmpty ? null : saveNote, child: Text(saved ? '✓ Saved to that lead' : saving ? 'Saving…' : 'Save to that lead')),
+              ),
+            ],
+            const SizedBox(height: 4),
+            const Text('Open that lead?', style: TextStyle(fontWeight: FontWeight.w700)),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('No')),
+          FilledButton(onPressed: canView ? () => Navigator.pop(ctx, id) : null, child: const Text('Yes, open lead')),
+        ],
+      );
+    }),
+  ).whenComplete(note.dispose);
+}
+
+Widget _dupNotice(String text, Color c) => Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: c.withValues(alpha: 0.35))),
+      child: Text('⚠ $text', style: TextStyle(fontSize: 12.5, color: c)),
+    );

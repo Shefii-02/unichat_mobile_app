@@ -41,39 +41,63 @@ class LeadContactFields extends StatefulWidget {
   State<LeadContactFields> createState() => _LeadContactFieldsState();
 }
 
-enum _Check { idle, checking, existing, fresh }
+enum _Check { idle, checking, pick, none, existing, fresh }
+
+/// Same number whether or not one side carries the country code / a leading 0 (9876543210 = 919876543210 = 09876543210).
+bool _sameNumber(String stored, String typed) {
+  if (stored.isEmpty || typed.isEmpty) return false;
+  if (stored == typed) return true;
+  final short = stored.length < typed.length ? stored : typed, long = stored.length < typed.length ? typed : stored;
+  return short.length >= 8 && long.endsWith(short);
+}
 
 class _LeadContactFieldsState extends State<LeadContactFields> {
   Timer? _debounce;
   int _seq = 0;   // a slow answer for an older number must not overwrite the newer one
   _Check _check = _Check.idle;
+  List<Map<String, dynamic>> _matches = const [];   // customers whose number matches what is typed so far (any country-code form)
 
   LeadContactState get _s => widget.state;
+
+  /// Choose an existing customer: fill the name / email and use their stored number.
+  void _pick(Map<String, dynamic> hit) {
+    _s.existing = hit;
+    _s.checked = true;
+    _s.phone.text = '${hit['phone'] ?? _s.phone.text}';
+    _s.name.text = '${hit['name'] ?? ''}';
+    _s.email.text = '${hit['email'] ?? ''}';
+    _matches = const [];
+    _check = _Check.existing;
+  }
 
   void _onPhone(String v) {
     _debounce?.cancel();
     final digits = v.replaceAll(RegExp(r'\D'), '');
     _s.existing = null;
     _s.checked = false;
-    if (digits.length < 7) { setState(() => _check = _Check.idle); return; }
+    if (digits.length < 5) { setState(() { _check = _Check.idle; _matches = const []; }); return; }   // search starts from the 5th digit — the full number isn't needed
     setState(() => _check = _Check.checking);
     final mine = ++_seq;
     _debounce = Timer(const Duration(milliseconds: 350), () async {
       try {
         final rows = await Api.list('/contacts', query: {'search': digits, 'per_page': 8});
         if (!mounted || mine != _seq) return;
-        final hit = rows.cast<Map<String, dynamic>?>().firstWhere((c) {
-          final p = '${c?['phone'] ?? ''}'.replaceAll(RegExp(r'\D'), '');
-          return p.isNotEmpty && (p == digits || p.endsWith(digits) || digits.endsWith(p));
-        }, orElse: () => null);
+        String digitsOf(Map c) => '${c['phone'] ?? ''}'.replaceAll(RegExp(r'\D'), '');
+        final all = rows.cast<Map<String, dynamic>>();
+        final exact = all.where((c) => _sameNumber(digitsOf(c), digits)).toList();
+        final partial = all.where((c) => digitsOf(c).contains(digits)).toList();   // still typing: the start / middle of a stored number
         setState(() {
-          _s.existing = hit;
-          _s.checked = true;
-          if (hit != null) {
-            _s.name.text = '${hit['name'] ?? ''}';
-            _s.email.text = '${hit['email'] ?? ''}';
+          if (exact.length == 1) {
+            _pick(exact.first);                                   // the number is complete and belongs to exactly one customer
+          } else if (exact.length > 1 || partial.isNotEmpty) {
+            _s.existing = null; _s.checked = false;
+            _matches = (exact.isNotEmpty ? exact : partial).take(5).toList();
+            _check = _Check.pick;                                 // several (or still-partial) matches: show their names to choose from
+          } else {
+            _matches = const [];
+            if (digits.length >= 7) { _s.checked = true; _check = _Check.fresh; }   // a complete-looking number nobody has: add as new
+            else { _check = _Check.none; }                                          // still short: no match yet, keep typing
           }
-          _check = hit != null ? _Check.existing : _Check.fresh;
         });
       } catch (_) {
         if (!mounted || mine != _seq) return;
@@ -91,8 +115,10 @@ class _LeadContactFieldsState extends State<LeadContactFields> {
   @override
   Widget build(BuildContext context) {
     final (msg, color) = switch (_check) {
-      _Check.idle => ('Type the number — we check whether this customer is already in your contacts.', AppColors.textLight),
+      _Check.idle => ('Type at least 5 digits of the number — we look for this customer in your contacts.', AppColors.textLight),
       _Check.checking => ('Checking contacts…', AppColors.textLight),
+      _Check.none => ('No customer matches these digits yet — keep typing.', AppColors.textLight),
+      _Check.pick => ('${_matches.length} customer${_matches.length == 1 ? '' : 's'} found — tap one, or keep typing the full number.', AppColors.textLight),
       _Check.existing => ('✓ Existing contact found — details filled in. You can edit them.', const Color(0xFF16A34A)),
       _Check.fresh => ('New number — a new contact will be added with the details below.', const Color(0xFFD97706)),
     };
@@ -109,6 +135,17 @@ class _LeadContactFieldsState extends State<LeadContactFields> {
         padding: const EdgeInsets.fromLTRB(2, 6, 2, 8),
         child: Text(msg, style: TextStyle(fontSize: 12, color: color)),
       ),
+      for (final c in (_check == _Check.pick ? _matches : const <Map<String, dynamic>>[]))
+        Card(
+          margin: const EdgeInsets.only(bottom: 6),
+          child: ListTile(
+            dense: true,
+            leading: const Icon(Icons.person_outline_rounded),
+            title: Text('${c['name'] ?? ''}'.trim().isEmpty ? 'Unnamed customer' : '${c['name']}'),
+            subtitle: Text('${c['phone'] ?? ''}'),
+            onTap: () => setState(() => _pick(c)),
+          ),
+        ),
       if (_check == _Check.existing || _check == _Check.fresh) ...[
         TextFormField(controller: _s.name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Customer name', border: OutlineInputBorder())),
         const SizedBox(height: 10),

@@ -128,10 +128,13 @@ class _SalesStaff extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
         child: Row(children: [
           action(Icons.person_add_alt_1_rounded, 'Add lead', tintLavender, () async {
-            if (await showNewLeadSheet(context)) ref.invalidate(wsHomeProvider('sales'));
+            final saved = await showNewLeadSheet(context);
+            if (!saved || !context.mounted) return;
+            // refresh once the sheet has fully left the screen — rebuilding the Home underneath a closing route trips Flutter's tree asserts
+            WidgetsBinding.instance.addPostFrameCallback((_) { if (context.mounted) ref.invalidate(wsHomeProvider('sales')); });
           }),
           const SizedBox(width: 8),
-          action(Icons.contact_phone_outlined, 'New contact', tintBlue, () => showNewContactSheet(context)),
+          action(Icons.contact_phone_outlined, 'New contact', tintBlue, () { showNewContactSheet(context); }),
           const SizedBox(width: 8),
           action(Icons.people_alt_outlined, 'Contacts', tintGreen, () => context.push('/contacts')),
           const SizedBox(width: 8),

@@ -168,12 +168,24 @@ class PushService {
     }
   }
 
+  DateTime? _lastSent;
+
   Future<void> _send(String token) async {
     _token = token;
+    _lastSent = DateTime.now();
     await Api.post('/push/register-token', data: {
       'fcm_token': token,
       'device_type': Platform.isIOS ? 'ios' : 'android',
     });
+  }
+
+  /// Tell the server about this phone's token again — it adds a missing row, rewrites an existing one and re-activates one that was
+  /// pruned or removed. Cheap and throttled; called when the app comes back to the foreground.
+  Future<void> resync() async {
+    final t = _token;
+    if (t == null) return;
+    if (_lastSent != null && DateTime.now().difference(_lastSent!) < const Duration(hours: 1)) return;
+    try { await _send(t); } catch (_) {}
   }
 
   /// Call before the auth token is cleared.

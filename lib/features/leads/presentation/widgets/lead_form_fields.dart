@@ -8,6 +8,7 @@ class LeadFormState {
   bool other = false;                    // "not listed" — typed by hand
   final otherLabel = TextEditingController();
   final categories = <String>[];         // the first is the primary
+  int? itemId;                           // the item / listing the customer enquired about (null = none)
 
   /// The origin part of the POST /leads body.
   Map<String, dynamic> originData() {
@@ -46,42 +47,134 @@ class _LeadOriginFieldState extends State<LeadOriginField> {
 
   String _name(Map<String, dynamic> o) => '${o['icon'] ?? ''} ${o['source_label']} · ${o['label']}'.trim();
 
-  Future<void> _pick() async {
-    final notListed = <String, dynamic>{'type': '_other', 'id': 0, 'source_label': 'Not listed', 'label': 'Type it myself', 'icon': '✏️'};
-    final picked = await showSearchPicker<Map<String, dynamic>>(
-      context,
-      title: 'lead origin',
-      options: [..._options, notListed],
-      labelOf: _name,
-      subtitleOf: (o) => o['sub'] as String?,
-      selected: _s.origin,
-    );
-    if (picked == null) return;
-    setState(() {
-      if (picked.value['type'] == '_other') { _s.origin = null; _s.other = true; } else { _s.origin = picked.value; _s.other = false; }
-    });
-  }
+  static const _otherKey = '_other';
 
   @override
   Widget build(BuildContext context) {
-    final shown = _s.origin != null ? _name(_s.origin!) : (_s.other ? 'Not listed — type it below' : null);
+    final primary = Theme.of(context).colorScheme.primary;
+    Widget row(String key, String text, String? sub, bool on, VoidCallback tap) => InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: tap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(on ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20, color: on ? primary : context.mutedColor),
+              const SizedBox(width: 8),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(text, style: TextStyle(fontSize: 13.5, fontWeight: on ? FontWeight.w600 : FontWeight.w400)),
+                if (sub != null && sub.isNotEmpty) Text(sub, style: TextStyle(fontSize: 11.5, color: context.mutedColor)),
+              ])),
+            ]),
+          ),
+        );
+
     return FField(
       label: 'Lead origin',
       hint: 'Which number / account / campaign the lead came from',
-      child: Column(children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: _loading ? null : _pick,
-          child: InputDecorator(
-            decoration: InputDecoration(border: const OutlineInputBorder(), isDense: true, suffixIcon: _loading ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))) : const Icon(Icons.search_rounded)),
-            child: Text(shown ?? (_loading ? 'Loading…' : 'Search & select'), maxLines: 1, overflow: TextOverflow.ellipsis, style: shown == null ? TextStyle(color: context.mutedColor) : null),
-          ),
+      child: _loading
+          ? const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final o in _options)
+                row('${o['type']}:${o['id']}', _name(o), o['sub'] as String?, _s.origin != null && _s.origin!['type'] == o['type'] && _s.origin!['id'] == o['id'],
+                    () => setState(() { _s.origin = o; _s.other = false; })),
+              row(_otherKey, '✏️ Not listed — type it myself', null, _s.other, () => setState(() { _s.origin = null; _s.other = true; })),
+              if (_s.other) ...[
+                const SizedBox(height: 6),
+                TextFormField(controller: _s.otherLabel, decoration: const InputDecoration(hintText: 'e.g. Phone call, referral, Diwali campaign', border: OutlineInputBorder(), isDense: true)),
+              ],
+            ]),
+    );
+  }
+}
+
+/// "Product / Service" — what the customer enquired about (from the listings catalogue), as radio buttons with a type filter and a search box
+/// for long lists. The same customer on a different one is a new lead; the same one is a duplicate. "None" is allowed.
+class LeadItemField extends StatefulWidget {
+  const LeadItemField({super.key, required this.state});
+  final LeadFormState state;
+  @override
+  State<LeadItemField> createState() => _LeadItemFieldState();
+}
+
+class _LeadItemFieldState extends State<LeadItemField> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String _type = '';
+  String _q = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Api.list('/listings').then((r) {
+      if (mounted) setState(() { _items = r; _loading = false; });
+    }).catchError((_) {
+      if (mounted) setState(() => _loading = false);
+    });
+  }
+
+  String _typeOf(Map<String, dynamic> it) => '${it['type'] ?? 'product'}';
+  String _title(Map<String, dynamic> it) => '${it['title'] ?? it['name'] ?? 'Item ${it['id']}'}';
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final s = widget.state;
+    final types = _items.map(_typeOf).toSet().toList()..sort();
+    final shown = _items.where((it) => (_type.isEmpty || _typeOf(it) == _type) && (_q.isEmpty || _title(it).toLowerCase().contains(_q.toLowerCase()))).toList();
+
+    Widget row(int? id, String text, {String? sub}) {
+      final on = s.itemId == id;
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() => s.itemId = id),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+          child: Row(children: [
+            Icon(on ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20, color: on ? primary : context.mutedColor),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: TextStyle(fontSize: 13.5, fontWeight: on ? FontWeight.w600 : FontWeight.w400))),
+            if (sub != null) Text(sub, style: TextStyle(fontSize: 11.5, color: context.mutedColor)),
+          ]),
         ),
-        if (_s.other) ...[
-          const SizedBox(height: 8),
-          TextFormField(controller: _s.otherLabel, decoration: const InputDecoration(hintText: 'e.g. Phone call, referral, Diwali campaign', border: OutlineInputBorder(), isDense: true)),
-        ],
-      ]),
+      );
+    }
+
+    return FField(
+      label: 'Product / Service',
+      hint: 'What the customer enquired about — a different one makes a new lead',
+      child: _loading
+          ? const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (types.length > 1)
+                Wrap(spacing: 6, children: [
+                  for (final t in ['', ...types])
+                    ChoiceChip(
+                      label: Text(t.isEmpty ? 'All' : '${t[0].toUpperCase()}${t.substring(1)}', style: const TextStyle(fontSize: 11.5)),
+                      selected: _type == t,
+                      onSelected: (_) => setState(() => _type = t),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ]),
+              if (_items.length > 8)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: TextField(
+                    onChanged: (v) => setState(() => _q = v.trim()),
+                    decoration: const InputDecoration(hintText: 'Search products / services…', prefixIcon: Icon(Icons.search_rounded), border: OutlineInputBorder(), isDense: true),
+                  ),
+                ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    row(null, 'None'),
+                    for (final it in shown)
+                      row((it['id'] as num).toInt(), _title(it), sub: [if (types.length > 1) _typeOf(it), if (it['price'] != null && '${it['price']}' != '0' && '${it['price']}' != '0.00') '₹${it['price']}'].join(' · ')),
+                    if (shown.isEmpty && _items.isNotEmpty) Padding(padding: const EdgeInsets.all(8), child: Text('Nothing matches.', style: TextStyle(color: context.mutedColor))),
+                  ]),
+                ),
+              ),
+            ]),
     );
   }
 }

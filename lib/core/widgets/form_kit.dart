@@ -13,6 +13,7 @@ Future<bool> showFormSheet(
 }) async {
   final result = await showModalBottomSheet<bool>(
     context: context,
+    useRootNavigator: true,   // always above the whole app, never inside a tab's nested navigator (which the Home rebuilds under)
     isScrollControlled: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
     shape: const RoundedRectangleBorder(
@@ -118,32 +119,32 @@ class _FormSheetState extends State<_FormSheet> {
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                     children: [
                       ...widget.fields(context),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppPalette.danger.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline_rounded,
-                                  color: AppPalette.danger, size: 18),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(_error!,
-                                    style: const TextStyle(
-                                        color: AppPalette.danger, fontSize: 13)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
               ),
+              // the problem is shown right above the button, so it is never hidden below a long form or behind the keyboard
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppPalette.danger.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: AppPalette.danger, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(_error!, style: const TextStyle(color: AppPalette.danger, fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               SafeArea(
                 minimum: const EdgeInsets.fromLTRB(20, 8, 20, 12),
                 child: FilledButton(
@@ -265,6 +266,61 @@ class FNumber extends StatelessWidget {
             : null,
         onSaved: (v) =>
             onSaved(v == null || v.trim().isEmpty ? null : num.tryParse(v.trim())),
+      ),
+    );
+  }
+}
+
+/// A short list of choices shown as round radio buttons (every option visible) instead of a dropdown.
+class FRadio<T> extends StatefulWidget {
+  const FRadio({super.key, required this.label, required this.options, required this.onSaved, this.initial, this.labelOf, this.hint, this.horizontal = true});
+  final String label;
+  final List<T> options;
+  final void Function(T?) onSaved;
+  final T? initial;
+  final String Function(T)? labelOf;
+  final String? hint;
+  final bool horizontal;   // true = chips in a wrapping row · false = one option per line
+  @override
+  State<FRadio<T>> createState() => _FRadioState<T>();
+}
+
+class _FRadioState<T> extends State<FRadio<T>> {
+  late T? _value = widget.initial;
+  String _label(T o) {
+    if (widget.labelOf != null) return widget.labelOf!(o);
+    final s = '$o';
+    return s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    Widget option(T o) {
+      final on = o == _value;
+      return InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => setState(() => _value = o),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Row(mainAxisSize: widget.horizontal ? MainAxisSize.min : MainAxisSize.max, children: [
+            Icon(on ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 20, color: on ? primary : context.mutedColor),
+            const SizedBox(width: 6),
+            Flexible(child: Text(_label(o), style: TextStyle(fontSize: 13.5, fontWeight: on ? FontWeight.w600 : FontWeight.w400))),
+          ]),
+        ),
+      );
+    }
+
+    return FField(
+      label: widget.label,
+      hint: widget.hint,
+      child: FormField<T>(
+        initialValue: _value,
+        onSaved: (_) => widget.onSaved(_value),
+        builder: (_) => widget.horizontal
+            ? Wrap(spacing: 8, children: [for (final o in widget.options) option(o)])
+            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [for (final o in widget.options) option(o)]),
       ),
     );
   }
