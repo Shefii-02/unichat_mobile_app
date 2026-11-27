@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:unichat_mobile_app/features/workspace/workspace_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/constants/app_colors.dart';
@@ -36,15 +35,8 @@ class MainShell extends ConsumerWidget {
     _Tab(7, Icons.people_alt_outlined, Icons.people_alt_rounded, 'Leads'),
   ];
 
-  /// Bottom tabs per workspace (the user's main / chosen section), as shell-branch numbers in bar order; 3 is the raised
-  /// Quick button. Sales is lead-first (Leads, Tasks, Attendance, Payroll); the others lean on what their team does most.
-  /// Anything not listed — Company Admin, Administrators — gets the full default bar.
-  static const _layouts = <String, List<int>>{
-    'sales': [0, 7, 1, 3, 4, 5, 6],
-    'marketing': [0, 2, 1, 3, 4, 6],
-    'hr': [0, 4, 1, 3, 5, 2, 6],
-    'accounts': [0, 1, 5, 3, 4, 2, 6],
-  };
+  /// The bottom bar is the same for everyone — Home, Todo, Chats, Explore, Attendance, Payroll, Profile — whatever access section they
+  /// belong to and whichever dashboard is picked in Home's dropdown (that only changes what Home shows). Leads is still reachable from Home / Explore.
   static const _defaultLayout = [0, 1, 2, 3, 4, 5, 6];
 
   @override
@@ -53,13 +45,10 @@ class MainShell extends ConsumerWidget {
     final cfg = ref.watch(mobileConfigProvider).maybeWhen(data: (c) => c, orElse: () => const MobileConfig());
     // Home and Profile always stay; the company can switch the rest off.
     const keyOf = {1: 'todo', 2: 'chats', 3: 'explore', 4: 'attendance', 5: 'payroll'};
-    final workspace = ref.watch(activeWorkspaceProvider);
-    final order = _layouts[workspace] ?? _defaultLayout;
-    final canLeads = PermissionGuard.can('leads.view');
+    const order = _defaultLayout;
     final tabs = [
       for (final b in order)
-        if ((keyOf[b] == null || cfg.tab(keyOf[b]!)) && (b != 7 || canLeads))
-          workspace == 'sales' && b == 1 ? const _Tab(1, Icons.checklist_rounded, Icons.checklist_rounded, 'Tasks') : _tabs[b],
+        if (keyOf[b] == null || cfg.tab(keyOf[b]!)) _tabs[b],
     ];
     final exploreSlot = tabs.indexWhere((t) => t.raised);
     if (PermissionGuard.teamChatEnabled) ref.watch(teamChatRealtimeProvider); // keeps the staff socket up + refreshes chats on events

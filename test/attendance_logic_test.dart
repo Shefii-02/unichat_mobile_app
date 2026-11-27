@@ -27,9 +27,9 @@ void main() {
       expect(punchAsk({'late_minutes': 80, 'late_note_mode': 'off', 'note_required': false, 'note_optional': false}), PunchAsk.nothing);
     });
 
-    test('late reason required / optional', () {
+    test('late reason required asks; optional does not (it is added from Attendance afterwards)', () {
       expect(punchAsk({'note_required': true}), PunchAsk.requiredNote);
-      expect(punchAsk({'note_optional': true}), PunchAsk.optionalNote);
+      expect(punchAsk({'note_optional': true}), PunchAsk.nothing);
     });
 
     test('outside the office radius → alert + reason (wins over the others)', () {

@@ -23,9 +23,14 @@ Future<void> requestLeave(BuildContext context, WidgetRef ref) async {
     fields: (ctx) => [
       if (types.isNotEmpty)
         FSelect<Rec>(
-          label: 'Leave type',
-          options: types,
-          labelOf: (t) => str(t['name'] ?? t['label']),
+          label: 'Leave type — paid leave and other (unpaid) leave',
+          // a type with no days left cannot be chosen; each shows paid / unpaid and what is left this year
+          options: types.where((t) => t['left'] == null || (num.tryParse('${t['left']}') ?? 1) > 0).toList(),
+          labelOf: (t) {
+            final left = t['left'] == null ? 'no limit' : '${t['left']} left';
+            final paid = (t['is_paid'] == true || t['is_paid'] == 1) ? 'Paid' : 'Unpaid';
+            return '${str(t['name'] ?? t['label'])} · $paid · $left';
+          },
           onSaved: (t) => data['leave_type_id'] = t?['id'],
         )
       else
@@ -45,7 +50,21 @@ Future<void> requestLeave(BuildContext context, WidgetRef ref) async {
         onSaved: (v) => data['reason'] = v,
       ),
     ],
-    onSubmit: () => Api.post('/hr/leave', data: data),
+    onSubmit: () {
+      // check what can be checked on the phone first; the server checks again (overlaps, the yearly allowance)
+      final a = DateTime.tryParse('${data['start_date']}');
+      final b = DateTime.tryParse('${data['end_date']}');
+      if (a != null && b != null) {
+        if (b.isBefore(a)) throw Exception('The end date is before the start date.');
+        final days = b.difference(a).inDays + 1;
+        final type = types.where((t) => t['id'] == data['leave_type_id']).cast<Rec?>().firstWhere((_) => true, orElse: () => null);
+        final left = type == null ? null : num.tryParse('${type['left'] ?? ''}');
+        if (left != null && days > left) {
+          throw Exception('Only $left day(s) of ${str(type?['name'])} left this year — you asked for $days.');
+        }
+      }
+      return Api.post('/hr/leave', data: data);
+    },
   );
   if (ok) ref.invalidate(hrLeaveProvider);
 }

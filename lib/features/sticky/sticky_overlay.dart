@@ -27,18 +27,33 @@ Color _hex(String? h) {
 String _toHex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 Color _ink(Color c) => c.computeLuminance() < 0.4 ? Colors.white : const Color(0xFF1F2937);
 
-/// Settings switch: show the floating notes / to-do circles on the Home page (device-local, default on).
-const kStickyEnabledKey = 'sticky_enabled';
-class StickyEnabledNotifier extends Notifier<bool> {
+/// Profile → Display switches (device-local, default on): the floating sticky-notes circle and the floating to-do circle are separate.
+/// A person who switched the old combined switch off keeps both off until they turn one back on.
+const kStickyNotesEnabledKey = 'sticky_notes_enabled';
+const kStickyTodoEnabledKey = 'sticky_todo_enabled';
+const kStickyEnabledKey = 'sticky_enabled';   // the old single switch — read once as the default for both
+bool _legacySticky() => LocalStorage.getBool(kStickyEnabledKey, defaultValue: true);
+
+class StickyNotesEnabledNotifier extends Notifier<bool> {
   @override
-  bool build() => LocalStorage.getBool(kStickyEnabledKey, defaultValue: true);
+  bool build() => LocalStorage.getBool(kStickyNotesEnabledKey, defaultValue: _legacySticky());
   void set(bool v) {
     state = v;
-    LocalStorage.setBool(kStickyEnabledKey, v);
+    LocalStorage.setBool(kStickyNotesEnabledKey, v);
   }
 }
 
-final stickyEnabledProvider = NotifierProvider<StickyEnabledNotifier, bool>(StickyEnabledNotifier.new);
+class StickyTodoEnabledNotifier extends Notifier<bool> {
+  @override
+  bool build() => LocalStorage.getBool(kStickyTodoEnabledKey, defaultValue: _legacySticky());
+  void set(bool v) {
+    state = v;
+    LocalStorage.setBool(kStickyTodoEnabledKey, v);
+  }
+}
+
+final stickyNotesEnabledProvider = NotifierProvider<StickyNotesEnabledNotifier, bool>(StickyNotesEnabledNotifier.new);
+final stickyTodoEnabledProvider = NotifierProvider<StickyTodoEnabledNotifier, bool>(StickyTodoEnabledNotifier.new);
 
 /// Wrap the Home page with this. Renders nothing until signed in and unlocked.
 class StickyOverlay extends ConsumerWidget {
@@ -49,15 +64,16 @@ class StickyOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).value;
     final locked = ref.watch(appLockProvider.select((s) => s.locked));
-    final enabled = ref.watch(stickyEnabledProvider);
+    final notes = ref.watch(stickyNotesEnabledProvider);
+    final todo = ref.watch(stickyTodoEnabledProvider);
     final base = child ?? const SizedBox.shrink();
-    if (user == null || locked || !enabled) return base;
+    if (user == null || locked || (!notes && !todo)) return base;
     return Stack(
       children: [
         base,
         // own Overlay so text fields in the cards have the ancestor they need (the app Navigator's is below us)
         Overlay(initialEntries: [
-          OverlayEntry(builder: (_) => Material(type: MaterialType.transparency, child: _StickyLayer(userId: user.id))),
+          OverlayEntry(builder: (_) => Material(type: MaterialType.transparency, child: _StickyLayer(userId: user.id, showNotes: notes, showTodo: todo))),
         ]),
       ],
     );
@@ -79,7 +95,8 @@ class _Note {
 }
 
 class _StickyLayer extends StatefulWidget {
-  const _StickyLayer({required this.userId});
+  const _StickyLayer({required this.userId, required this.showNotes, required this.showTodo});
+  final bool showNotes, showTodo;
   final int userId;
   @override
   State<_StickyLayer> createState() => _StickyLayerState();
@@ -194,7 +211,7 @@ class _StickyLayerState extends State<_StickyLayer> {
     final todoPos = _clamp(_pos['todo'] ?? todoFallback, screen, const Size(_bubble, _bubble));
 
     return Stack(children: [
-      if (_notesOn)
+      if (widget.showNotes && _notesOn)
         for (final n in _notes)
           _NoteCard(
             key: ValueKey('note${n.id}'),
@@ -209,7 +226,7 @@ class _StickyLayerState extends State<_StickyLayer> {
             },
             onDelete: () => _deleteNote(n),
           ),
-      if (_todoOn)
+      if (widget.showTodo && _todoOn)
         _TodoCard(
           userId: widget.userId,
           color: _defaultColor,
@@ -219,6 +236,7 @@ class _StickyLayerState extends State<_StickyLayer> {
           onMoveEnd: _persist,
           onClose: () { setState(() => _todoOn = false); _persist(); },
         ),
+      if (widget.showNotes)
       _Bubble(
         icon: '📝', label: 'Sticky notes', color: _defaultColor, on: _notesOn, pos: notesPos, badge: _notes.length,
         onMove: (d) => _move('notes', d, screen, const Size(_bubble, _bubble), notesFallback),
@@ -228,6 +246,7 @@ class _StickyLayerState extends State<_StickyLayer> {
         error: _error.isEmpty ? null : _error,
         onErrorTap: () => setState(() => _error = ''),
       ),
+      if (widget.showTodo)
       _Bubble(
         icon: '✅', label: 'To-do list', color: _defaultColor, on: _todoOn, pos: todoPos,
         onMove: (d) => _move('todo', d, screen, const Size(_bubble, _bubble), todoFallback),

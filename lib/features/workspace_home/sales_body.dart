@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/core/router/shell_routes.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
+import 'package:unichat_mobile_app/features/chat_channels/my_chats.dart';
+import 'package:unichat_mobile_app/features/contacts/presentation/pages/contacts_page.dart';
+import 'package:unichat_mobile_app/features/leads/presentation/pages/leads_page.dart';
+import 'package:unichat_mobile_app/features/workspace_home/sales_feed.dart';
 import 'package:unichat_mobile_app/features/workspace_home/ws_style.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 /// Sales workspace Home. A team head / manager sees the team view; a plain sales member sees their own day.
 class SalesBody extends ConsumerWidget {
@@ -42,7 +46,8 @@ class _SalesTeam extends ConsumerWidget {
         progress: total > 0 ? (done / total).toDouble() : 0,
         actions: [WsHeroButton('Start follow-ups', () => context.goToRoute('/crm-followups')), WsHeroButton('Plan day', () => context.goToRoute('/crm-tasks'), filled: false)],
       ),
-      const WsAttendance(),
+      const WsAttendance(afterPunchOnly: true),
+      SalesFeed(onChanged: () => ref.invalidate(wsHomeProvider('sales'))),
       WsTiles([
         ('Leads', fmtNum(asMap(k?['leads'])?['total']), '${fmtNum(asMap(k?['leads'])?['new_today'])} new today', tintPeach, () => context.goToRoute('/leads')),
         ('Contacts', fmtNum(asMap(k?['contacts'])?['total']), '+${fmtNum(asMap(k?['contacts'])?['new_week'])} this week', tintBlue, () => context.goToRoute('/contacts')),
@@ -86,11 +91,6 @@ class _SalesTeam extends ConsumerWidget {
 class _SalesStaff extends ConsumerWidget {
   const _SalesStaff();
 
-  static Future<void> _open(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(wsHomeProvider('sales'));
@@ -99,10 +99,8 @@ class _SalesStaff extends ConsumerWidget {
     final target = asMap(me?['sales_target']);
     final rank = asMap(me?['rank']);
     final f = asMap(d?['followups']);
-    final k = asMap(d?['kpis']);
-    final hot = asRows(d?['hot_leads']);
     final pct = (n(target?['progress']) ?? 0).toDouble();
-    final done = n(f?['done']) ?? 0, total = n(f?['total_today']) ?? 0;
+    final done = n(f?['done']) ?? 0;
 
     Widget action(IconData icon, String label, Tint t, VoidCallback onTap) => Expanded(
           child: GestureDetector(
@@ -125,44 +123,94 @@ class _SalesStaff extends ConsumerWidget {
         progress: pct / 100,
         footer: target?['remaining'] != null ? '${fmtMoney(target?['remaining'])} to go' : null,
       ),
-      const WsAttendance(),
+      const WsAttendance(afterPunchOnly: true),
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
         child: Row(children: [
-          action(Icons.person_add_alt_1_rounded, 'Add lead', tintLavender, () => context.goToRoute('/leads')),
+          action(Icons.person_add_alt_1_rounded, 'Add lead', tintLavender, () async {
+            if (await showNewLeadSheet(context)) ref.invalidate(wsHomeProvider('sales'));
+          }),
           const SizedBox(width: 8),
-          action(Icons.phone_outlined, 'Log call', tintBlue, () => context.goToRoute('/leads')),
+          action(Icons.contact_phone_outlined, 'New contact', tintBlue, () => showNewContactSheet(context)),
           const SizedBox(width: 8),
-          action(Icons.chat_outlined, 'WhatsApp', tintGreen, () => context.goToRoute('/wa-chat/chats')),
+          action(Icons.people_alt_outlined, 'Contacts', tintGreen, () => context.push('/contacts')),
           const SizedBox(width: 8),
-          action(Icons.event_outlined, 'Meeting', tintPeach, () => context.goToRoute('/calendar')),
+          action(Icons.call_outlined, 'Call logs', tintPeach, () => context.push('/call-logs')),
         ]),
       ),
-      WsTiles([
-        ('Follow-ups', '${fmtNum(done)}/${fmtNum(total)}', 'done today', tintBlue, () => context.goToRoute('/crm-followups')),
-        ('New leads', fmtNum(asMap(k?['leads'])?['new_today']), 'today', tintPeach, () => context.goToRoute('/leads')),
-        ('My leads', fmtNum(asMap(k?['leads'])?['total']), 'in my pipeline', tintLavender, () => context.goToRoute('/leads')),
-        ('Chats', fmtNum(asMap(k?['chats'])?['unread']), 'waiting', tintGreen, () => context.goToRoute('/wa-chat/chats')),
-      ]),
-      WsSection(
-        title: 'Hot leads',
-        action: 'My leads',
-        onAction: () => context.goToRoute('/leads'),
-        child: WsRows([
-          for (final l in hot)
-            WsRow(
-              leading: WsAvatar('${l['name'] ?? ''}'),
-              title: '${l['name'] ?? ''}',
-              subtitle: '${'${l['stage'] ?? ''}'.replaceAll('_', ' ')} · ${wsAgo('${l['updated_at'] ?? ''}')} ago',
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                WsIconBtn(Icons.phone_outlined, () => _open('tel:${l['phone']}')),
-                const SizedBox(width: 8),
-                WsIconBtn(Icons.chat_rounded, () => _open('https://wa.me/${'${l['phone']}'.replaceAll(RegExp(r'[^0-9]'), '')}'), fg: Colors.white, bg: M.taskDoneBg),
-              ]),
+      // My chats by channel — round icons with how many are assigned to me; tap for the list (a number / account picker first when there are several).
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          for (final (icon, label, key, tint) in [
+            (Icons.cloud_done_rounded, 'WA Cloud', 'wa_cloud', tintGreen),
+            (Icons.chat_rounded, 'WA Chat', 'wa_chat', tintGreen),
+            (Icons.camera_alt_rounded, 'Instagram', 'instagram', tintPeach),
+            (Icons.messenger_rounded, 'Messenger', 'messenger', tintBlue),
+            (Icons.web_rounded, 'Web widget', 'widget', tintLavender),
+          ])
+            _RoundCount(
+              icon: icon,
+              label: label,
+              count: ref.watch(myChatChannelsProvider).maybeWhen(data: (m) => m[key]?.total ?? 0, orElse: () => 0),
+              tint: tint,
+              onTap: () => openChannel(context, ref, key),
             ),
-        ], empty: 'New leads assigned to you will appear here.'),
+        ]),
       ),
+      // Today at a glance — three cards per row
+      WsTiles3([
+        ('My leads', '${fmtNum(asMap(d?['cards'])?['my_leads']?['active'])}/${fmtNum(asMap(d?['cards'])?['my_leads']?['total'])}', 'active / total', tintLavender, () => context.goToRoute('/leads'), wide: false),
+        ('New leads', '${fmtNum(asMap(d?['cards'])?['new_leads']?['today'])}/${fmtNum(asMap(d?['cards'])?['new_leads']?['prev'])}', 'today / yesterday', tintPeach, () => context.goToRoute('/leads'), wide: false),
+        ('Follow-ups', fmtNum(asMap(d?['today'])?['followups']), '${fmtNum(f?['overdue'])} overdue · ${fmtNum(done)} done', tintBlue, () => context.goToRoute('/crm-followups'), wide: false),
+        ('Missed', fmtNum(asMap(d?['today'])?['missed']), 'calls today', tintPeach, () => context.push('/call-logs?dir=missed&today=1'), wide: false),
+        ('Called', fmtNum(asMap(d?['today'])?['called']), 'calls today', tintBlue, () => context.push('/call-logs?today=1'), wide: false),
+        ('Closed', fmtNum(asMap(d?['today'])?['closed']), 'won today', tintGreen, () => context.goToRoute('/leads'), wide: false),
+        ('Lost leads', '${fmtNum(asMap(d?['cards'])?['lost']?['today'])}/${fmtNum(asMap(d?['cards'])?['lost']?['total'])}', 'today / total', tintAmber, () => context.goToRoute('/leads'), wide: false),
+        ('Transferred', '${fmtNum(asMap(d?['cards'])?['transferred']?['from_me'])} out · ${fmtNum(asMap(d?['cards'])?['transferred']?['to_me'])} in', 'from me · to me (this month)', tintLavender, () => context.goToRoute('/leads'), wide: true),
+      ]),
+      SalesFeed(onChanged: () => ref.invalidate(wsHomeProvider('sales'))),
       const SizedBox(height: 12),
     ]);
+  }
+}
+
+/// A round icon with its label underneath and the count floating at the top right (hidden when 0).
+class _RoundCount extends StatelessWidget {
+  const _RoundCount({required this.icon, required this.label, required this.count, required this.tint, required this.onTap});
+  final IconData icon;
+  final String label;
+  final int count;
+  final Tint tint;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkResponse(
+      onTap: onTap,
+      radius: 40,
+      child: SizedBox(
+        width: 62,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Stack(clipBehavior: Clip.none, children: [
+            Container(width: 52, height: 52, decoration: BoxDecoration(color: tint.$1, shape: BoxShape.circle), child: Icon(icon, color: tint.$2, size: 24)),
+            if (count > 0)
+              Positioned(
+                top: -4,
+                right: -6,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: const Color(0xFFEF4444), borderRadius: BorderRadius.circular(10), border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2)),
+                  child: Text(count > 99 ? '99+' : '$count', style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800)),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 5),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: tint.$3)),
+        ]),
+      ),
+    );
   }
 }

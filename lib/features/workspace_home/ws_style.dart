@@ -4,6 +4,7 @@ import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/attendance/widgets/attendance_status_card.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
+import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 
 /// Building blocks for the workspace Home bodies (Sales / Administrators / HR / Marketing / Accounts), in the SAME look as the Company Admin Home:
 /// the purple hero summary, pastel stat tiles, plain section headers and soft rounded list cards.
@@ -53,10 +54,25 @@ String wsClock(String iso) {
 }
 
 /// The clock-in / attendance card, exactly as on the Company Admin Home — right under each workspace's summary (when the plan includes HR).
-class WsAttendance extends StatelessWidget {
-  const WsAttendance({super.key});
+class WsAttendance extends ConsumerWidget {
+  /// [afterPunchOnly]: show the card only once today has a break or a clock-out (so the person can end the break / clock in again when they
+  /// reopen the app) — the Sales dashboard stays clean the rest of the day; clock in / out lives on the Attendance tab.
+  const WsAttendance({super.key, this.afterPunchOnly = false});
+  final bool afterPunchOnly;
+
   @override
-  Widget build(BuildContext context) => PermissionGuard.entitled('hr') ? const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 0), child: AttendanceStatusCard()) : const SizedBox.shrink();
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!PermissionGuard.entitled('hr')) return const SizedBox.shrink();
+    if (afterPunchOnly) {
+      final me = ref.watch(hrAttendanceMeProvider).maybeWhen(data: (d) => d, orElse: () => null);
+      final today = me?['today'] is Map ? me!['today'] as Map : null;
+      final breaks = today?['breaks'];
+      final hadBreak = me?['open_break'] != null || (breaks is List && breaks.isNotEmpty);
+      final clockedOut = today?['clock_out_at'] != null;
+      if (!hadBreak && !clockedOut) return const SizedBox.shrink();
+    }
+    return const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 0), child: AttendanceStatusCard());
+  }
 }
 
 /// True when the signed-in user holds ANY of [perms] (owners / superadmins always do) — or no permission is required.
@@ -173,6 +189,39 @@ class WsTiles extends StatelessWidget {
                 const SizedBox(height: 1),
                 Text(t.$1, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: t.$4.$3)),
                 Text(t.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: t.$4.$3)),
+              ]),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+/// Same pastel stat cards as [WsTiles], but THREE per row. A card can span two columns (`wide`) — used for a card that carries two numbers.
+typedef WsCard3 = (String label, String value, String sub, Tint tint, VoidCallback? onTap, {bool wide});
+
+class WsTiles3 extends StatelessWidget {
+  const WsTiles3(this.items, {super.key});
+  final List<WsCard3> items;
+  @override
+  Widget build(BuildContext context) {
+    const gap = 8.0;
+    final w = (MediaQuery.of(context).size.width - 32 - gap * 2) / 3;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Wrap(spacing: gap, runSpacing: gap, children: [
+        for (final t in items)
+          GestureDetector(
+            onTap: t.$5,
+            child: Container(
+              width: t.wide ? w * 2 + gap : w,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              decoration: BoxDecoration(color: t.$4.$1, borderRadius: BorderRadius.circular(12)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(t.$2, maxLines: 1, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: t.$4.$2))),
+                const SizedBox(height: 1),
+                Text(t.$1, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: t.$4.$3)),
+                Text(t.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, color: t.$4.$3)),
               ]),
             ),
           ),

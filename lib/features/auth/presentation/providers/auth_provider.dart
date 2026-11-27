@@ -52,6 +52,13 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
     state = AsyncData(user);
   }
 
+  /// The signed-in person edited their own profile (photo / name / phone): show it now AND save it in the on-device cache — the cache is what
+  /// the next cold start reads first, so without this the old photo and number came back on reopen. No app-lock prompt.
+  Future<void> updateSelf(UserModel user) async {
+    state = AsyncData(user);
+    await LocalStorage.setJson(LocalStorage.kUser, user.toJson());
+  }
+
   /// Called by the device-login flow once `claim` has persisted the session.
   void adopt(UserModel user) {
     state = AsyncData(user);
@@ -91,6 +98,11 @@ class AuthNotifier extends AsyncNotifier<UserModel?> {
       await logout();
       return false;
     }
+    // pick up what changed elsewhere (a photo or number edited on the website / by HR) so the cached copy is not stale
+    try {
+      final fresh = await ref.read(authRepositoryProvider).validateToken();
+      if (state.value?.id == fresh.id) state = AsyncData(fresh);
+    } catch (_) {/* offline — keep the cached copy */}
     return true;
   }
 

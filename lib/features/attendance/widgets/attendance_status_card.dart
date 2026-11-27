@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:unichat_mobile_app/core/network/api.dart' show apiErrorMessage;
+import 'package:unichat_mobile_app/core/network/api.dart' show Api, apiErrorMessage;
 import 'package:unichat_mobile_app/core/theme/app_theme.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart';
@@ -98,6 +98,11 @@ class AttendanceStatusCard extends ConsumerWidget {
                   ],
                 ),
               ],
+              if (_lateReasonOpen(today, settings)) _LateReasonRow(minutes: (today!['late_minutes'] as num).toInt(), onSaved: () => ref.invalidate(hrAttendanceMeProvider))
+              else if (_lateReasonSaved(today)) Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text('Late reason: ${today!['late_note']}', style: TextStyle(fontSize: 11.5, color: context.mutedColor, fontStyle: FontStyle.italic)),
+              ),
               const SizedBox(height: 12),
               if (!clockedIn)
                 SwipeActionButton(
@@ -195,6 +200,82 @@ class AttendanceStat extends StatelessWidget {
         const SizedBox(height: 1),
         Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: M.attTitle)),
       ],
+    );
+  }
+}
+
+
+/// Late today, the company's late-reason setting is "optional" and nothing has been written yet → the reason is asked here, after clock-in.
+bool _lateReasonOpen(Map<String, dynamic>? today, Map<String, dynamic> settings) =>
+    settings['late_note_mode'] == 'optional' &&
+    today != null &&
+    today['clock_in_at'] != null &&
+    ((today['late_minutes'] as num?) ?? 0) > 0 &&
+    today['clock_in_status'] == 'danger' &&
+    '${today['late_note'] ?? ''}'.trim().isEmpty;
+
+bool _lateReasonSaved(Map<String, dynamic>? today) => today != null && '${today['late_note'] ?? ''}'.trim().isNotEmpty && ((today['late_minutes'] as num?) ?? 0) > 0;
+
+class _LateReasonRow extends StatefulWidget {
+  const _LateReasonRow({required this.minutes, required this.onSaved});
+  final int minutes;
+  final VoidCallback onSaved;
+
+  @override
+  State<_LateReasonRow> createState() => _LateReasonRowState();
+}
+
+class _LateReasonRowState extends State<_LateReasonRow> {
+  final _c = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _c.text.trim();
+    if (text.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await Api.raw.post('/hr/attendance/late-note', data: {'note': text});
+      widget.onSaved();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('late-reason-row'),
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('You clocked in ${formatDelay(widget.minutes)} min late — add a reason (optional).',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.orange.shade800)),
+          const SizedBox(height: 6),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _c,
+                maxLength: 500,
+                decoration: const InputDecoration(hintText: 'e.g. Traffic delay', isDense: true, counterText: '', border: OutlineInputBorder()),
+                onSubmitted: (_) => _save(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(onPressed: _busy ? null : _save, child: Text(_busy ? '…' : 'Save')),
+          ]),
+        ],
+      ),
     );
   }
 }

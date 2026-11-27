@@ -31,7 +31,7 @@ class InstagramInboxPage extends ConsumerWidget {
               subtitle: str(c['last_message_preview'] ?? c['last_message'] ?? c['preview']),
               leadingIcon: Icons.person_rounded,
               leadingColor: const Color(0xFFE1306C),
-              onTap: () => _conversation(context, ref, c),
+              onTap: () => openConversation(context, ref, c),
               trailing: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -82,7 +82,8 @@ class InstagramInboxPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _conversation(BuildContext context, WidgetRef ref, Rec c) async {
+  /// The conversation sheet (thread + reply). Public so "my chats" on the Sales home can open it too.
+  Future<void> openConversation(BuildContext context, WidgetRef ref, Rec c) async {
     final controller = TextEditingController();
     await showModalBottomSheet<void>(
       context: context,

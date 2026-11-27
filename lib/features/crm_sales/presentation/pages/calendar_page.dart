@@ -72,10 +72,14 @@ class _CalendarPageState extends State<CalendarPage> {
     List<Rec> staff;
     try {
       contacts = await Api.list('/contacts', query: {'per_page': 100});
-      staff = await Api.list('/staff');
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
       return;
+    }
+    try {
+      staff = await Api.list('/staff');   // needs staff.view — without it the event is simply the person's own
+    } catch (_) {
+      staff = const [];
     }
     if (!context.mounted) return;
     final data = <String, dynamic>{'type': 'appointment'};
@@ -92,6 +96,7 @@ class _CalendarPageState extends State<CalendarPage> {
         if (contacts.isNotEmpty)
           FSelect<Rec>(label: 'Contact (optional)', options: contacts,
               labelOf: (c) => '${c['name'] ?? c['phone']}', onSaved: (c) => data['contact_id'] = c?['id']),
+        if (staff.isNotEmpty)
         FSelect<Rec>(label: 'Assign to (optional)', options: staff, labelOf: (s) => str(s['name']),
             onSaved: (s) => data['assigned_to'] = s?['id']),
       ],

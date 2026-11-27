@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:unichat_mobile_app/core/nav/app_modules.dart';
 import 'package:unichat_mobile_app/core/widgets/stub_page.dart';
 import 'package:unichat_mobile_app/core/storage/local_storage.dart';
+import 'package:unichat_mobile_app/features/settings/presentation/pages/display_page.dart';
+import 'package:unichat_mobile_app/features/calls/call_logs_page.dart';
 import 'package:unichat_mobile_app/features/app_lock/app_lock_page.dart';
 import 'package:unichat_mobile_app/features/app_lock/app_lock_provider.dart';
 import 'package:unichat_mobile_app/features/app_lock/app_lock_setup_prompt_page.dart';
@@ -625,6 +627,10 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // WhatsApp customer chats (module tile) — no longer a bottom-nav tab, so a normal pushed screen.
       GoRoute(path: '/wa-chat/chats', builder: (_, __) => const ChatsPage()),
+      // Calls logged on leads, with incoming / outgoing / missed / received + date-range filters (Sales dashboard quick action)
+      // Profile → Display: theme, full-screen, and the floating sticky-notes / to-do buttons
+      GoRoute(path: '/display', builder: (_, __) => const DisplayPage()),
+      GoRoute(path: '/call-logs', builder: (_, s) => CallLogsPage(direction: s.uri.queryParameters['dir'], today: s.uri.queryParameters['today'] == '1')),
       // Team chat (bottom "Chats" tab → list; these open full-screen over the shell).
       GoRoute(path: '/team-chat/new', builder: (_, __) => const NewChatPage()),
       GoRoute(path: '/team-chat/new-group', builder: (_, __) => const NewGroupPage()),

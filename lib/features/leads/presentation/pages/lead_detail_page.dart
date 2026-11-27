@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:unichat_mobile_app/core/permissions/permission_guard.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
 import 'package:unichat_mobile_app/features/leads/lead_stage.dart';
+import 'package:unichat_mobile_app/features/leads/presentation/widgets/lead_installments.dart';
 import 'package:unichat_mobile_app/features/modules/_shared.dart';
 
 final _leadProvider = FutureProvider.family<Rec, int>(
@@ -50,7 +51,7 @@ class LeadDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_leadProvider(id));
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Lead'),
@@ -59,6 +60,7 @@ class LeadDetailPage extends ConsumerWidget {
               Tab(text: 'Overview'),
               Tab(text: 'Notes'),
               Tab(text: 'Timeline'),
+              Tab(text: 'Installments'),
             ],
           ),
           actions: [
@@ -103,6 +105,7 @@ class LeadDetailPage extends ConsumerWidget {
                 _overview(context, ref, lead),
                 _notes(context, ref),
                 _timeline(ref),
+                LeadInstallmentsTab(leadId: id, saleValue: lead['sale_value']),
               ],
             );
           },
@@ -224,6 +227,26 @@ class LeadDetailPage extends ConsumerWidget {
                 success: 'Stage updated',
               );
               if (ok) _refresh(ref);
+              // Closed as Won: is the student paying in instalments? Set the plan up right away.
+              if (ok && v == 'enrolled' && v != stage && context.mounted) {
+                final go = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Paying in installments?'),
+                    content: const Text('Set up when each installment is due and how much, so it can be followed up and counted correctly.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Set up installments')),
+                    ],
+                  ),
+                );
+                if (go == true && context.mounted) {
+                  final fresh = await Api.one('/leads/$id').catchError((_) => <String, dynamic>{});
+                  final l = fresh['lead'] as Map<String, dynamic>? ?? fresh;
+                  await showInstallmentPlanSetup(context, id, l['sale_value'] ?? lead['sale_value']);
+                  _refresh(ref);
+                }
+              }
             },
           ),
           _EditableRow(
@@ -390,6 +413,7 @@ class LeadDetailPage extends ConsumerWidget {
       submitLabel: 'Save',
       fields: (ctx) => [
         FSelect<String>(label: 'Type', options: const ['call', 'message', 'meeting', 'visit', 'other'], initial: 'call', labelOf: (v) => v[0].toUpperCase() + v.substring(1), onSaved: (v) => data['kind'] = v ?? 'call'),
+        FSelect<String>(label: 'Call direction', options: const ['outgoing', 'incoming', 'missed'], initial: 'outgoing', labelOf: (v) => {'outgoing': 'Outgoing — I called', 'incoming': 'Incoming — they called', 'missed': 'Missed call'}[v] ?? v, onSaved: (v) => data['direction'] = v ?? 'outgoing'),
         FSelect<String>(label: 'Outcome', options: const ['connected', 'not_reachable', 'callback', 'interested', 'not_interested', 'wrong_number'], labelOf: (v) => v.replaceAll('_', ' '), onSaved: (v) { if (v != null) data['outcome'] = v; }),
         FText(label: 'Notes', maxLines: 3, onSaved: (v) { if (v.isNotEmpty) data['notes'] = v; }),
         StatefulBuilder(

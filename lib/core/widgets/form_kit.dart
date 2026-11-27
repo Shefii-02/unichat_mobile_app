@@ -79,16 +79,16 @@ class _FormSheetState extends State<_FormSheet> {
       ),
       child: DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.7,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
+        initialChildSize: 0.92,
+        minChildSize: 0.5,
+        maxChildSize: 0.97,
         builder: (context, scrollController) {
           return Column(
             children: [
               const SizedBox(height: 10),
               Container(
-                width: 40,
-                height: 4,
+                width: 48,
+                height: 5,
                 decoration: BoxDecoration(
                   color: context.lineColor,
                   borderRadius: BorderRadius.circular(2),
@@ -498,4 +498,40 @@ Future<bool> confirm(
     ),
   );
   return ok ?? false;
+}
+
+/// A tall, scrollable bottom sheet for lists and read-only content — a drag handle on top (pull it up or down to resize, down far enough to close),
+/// a title, and a body that scrolls. [builder] gets the sheet's scroll controller: hand it to the ListView.
+Future<T?> showTallSheet<T>(
+  BuildContext context, {
+  required String title,
+  required Widget Function(BuildContext context, ScrollController controller) builder,
+  Widget? trailing,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (ctx) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.92,
+      minChildSize: 0.5,
+      maxChildSize: 0.97,
+      builder: (ctx, controller) => Column(children: [
+        const SizedBox(height: 10),
+        Container(width: 48, height: 5, decoration: BoxDecoration(color: ctx.lineColor, borderRadius: BorderRadius.circular(3))),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 12, 6),
+          child: Row(children: [
+            Expanded(child: Text(title, style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+            if (trailing != null) trailing,
+            IconButton(onPressed: () => Navigator.of(ctx).pop(), icon: const Icon(Icons.close_rounded)),
+          ]),
+        ),
+        Expanded(child: builder(ctx, controller)),
+      ]),
+    ),
+  );
 }

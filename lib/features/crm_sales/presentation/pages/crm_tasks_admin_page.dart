@@ -146,12 +146,18 @@ class _CrmTasksAdminPageState extends ConsumerState<CrmTasksAdminPage> with Sing
   Future<void> _form(BuildContext context, {Rec? existing}) async {
     List<Rec> staff = const [];
     List<Rec> leads = const [];
+    // Assign-to needs the staff list (staff.view) — without that permission the task simply goes to the person themselves, so a failure here must not block the form.
     try {
       staff = await Api.list('/staff');
-      if (widget.followups) leads = await Api.list('/leads', query: {'per_page': 100});
-    } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
-      return;
+    } catch (_) {
+      staff = const [];
+    }
+    if (widget.followups) {
+      try {
+        leads = await Api.list('/leads', query: {'per_page': 100});
+      } catch (_) {
+        leads = const [];
+      }
     }
     if (!context.mounted) return;
 
@@ -176,6 +182,7 @@ class _CrmTasksAdminPageState extends ConsumerState<CrmTasksAdminPage> with Sing
           initial: due == null ? null : '${due.year}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')} ${due.hour.toString().padLeft(2, '0')}:${due.minute.toString().padLeft(2, '0')}',
           onSaved: (v) => data['due_at'] = v.isEmpty ? null : v,
         ),
+        if (staff.isNotEmpty)
         FSelect<Rec>(
           label: 'Assign to', options: staff, labelOf: (s) => str(s['name']),
           initial: existing == null ? null : pick(staff, (existing['assignee'] is Map ? (existing['assignee'] as Map)['id'] : null)),

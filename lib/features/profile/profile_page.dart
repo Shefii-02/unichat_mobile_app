@@ -20,8 +20,6 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final user = ref.watch(authProvider).value;
-    final hasPin = ref.watch(appLockProvider.select((s) => s.hasMpin));
-    final lockLoaded = ref.watch(appLockProvider.select((s) => s.loaded));
     final dash = ref
         .watch(dashboardMeProvider)
         .maybeWhen(orElse: () => null, data: (d) => d);
@@ -194,28 +192,11 @@ class ProfilePage extends ConsumerWidget {
               _MenuGroup(
                 label: 'Preferences',
                 items: [
-                  // The PIN lock is soft: asked once after login (set or skip) and switchable here at any time.
-                  if (cfg.profileItem('app_lock'))
+                  if (cfg.profileItem('display'))
                     _MenuItem(
-                      Icons.pin_outlined,
-                      'App lock PIN',
-                      keyName: 'profile-app-lock',
-                      onTap:
-                          () =>
-                              hasPin
-                                  ? turnOffAppLock(context, ref)
-                                  : turnOnAppLock(context, ref),
-                      trailing: Switch(
-                        key: const ValueKey('profile-app-lock-switch'),
-                        value: hasPin,
-                        onChanged:
-                            lockLoaded
-                                ? (on) =>
-                                    on
-                                        ? turnOnAppLock(context, ref)
-                                        : turnOffAppLock(context, ref)
-                                : null,
-                      ),
+                      Icons.palette_outlined,
+                      'Display',
+                      onTap: () => context.push('/display'),
                     ),
                   if (cfg.profileItem('settings'))
                     _MenuItem(

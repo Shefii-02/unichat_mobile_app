@@ -221,21 +221,22 @@ class _WaCloudInboxPageState extends State<WaCloudInboxPage> {
         ),
       ),
       onTap: () async {
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ThreadPage(conversation: c)));
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => WaCloudThreadPage(conversation: c)));
         _load(); // opening a thread marks it read — refresh the badges
       },
     );
   }
 }
 
-class _ThreadPage extends StatefulWidget {
-  const _ThreadPage({required this.conversation});
+/// One WA Cloud conversation (messages + reply). Public so other screens (the Sales home's "my chats") can open it.
+class WaCloudThreadPage extends StatefulWidget {
+  const WaCloudThreadPage({super.key, required this.conversation});
   final Rec conversation;
   @override
-  State<_ThreadPage> createState() => _ThreadPageState();
+  State<WaCloudThreadPage> createState() => _ThreadPageState();
 }
 
-class _ThreadPageState extends State<_ThreadPage> {
+class _ThreadPageState extends State<WaCloudThreadPage> {
   late Rec _conv = widget.conversation;
   List<Rec> _messages = [];
   bool _loading = true;

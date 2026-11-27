@@ -85,7 +85,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
         waContactToken: user.waContactToken,
         permissions: user.permissions,
       );
-      ref.read(authProvider.notifier).adopt(updated);
+      await ref.read(authProvider.notifier).updateSelf(updated);
       if (mounted) {
         ScaffoldMessenger.of(
           context,

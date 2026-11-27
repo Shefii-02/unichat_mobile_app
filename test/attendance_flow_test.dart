@@ -105,13 +105,11 @@ void main() {
     expect(h.fields('/hr/attendance/clock-in')['note'], 'Bus broke down');
   });
 
-  testWidgets('late reason OPTIONAL: asked, but can be skipped', (tester) async {
+  testWidgets('late reason OPTIONAL: clock-in goes straight through; the reason is added from Attendance afterwards', (tester) async {
     final h = _Harness(check: {'late_minutes': 20, 'late_note_mode': 'optional', 'note_optional': true, 'note_message': "You're 20 min late — you can add a reason (optional)."});
     await h.start(tester);
-    expect(find.text('Reason for being late (optional)'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('punch-submit')));
-    await _pump(tester);
     expect(h.result, isTrue);
+    expect(find.byKey(const ValueKey('reason-field')), findsNothing);
     expect(h.fields('/hr/attendance/clock-in').containsKey('note'), isFalse);
   });
 

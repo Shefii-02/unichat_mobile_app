@@ -16,7 +16,6 @@ import 'package:unichat_mobile_app/features/modules/_shared.dart';
 import 'package:unichat_mobile_app/features/modules/module_providers.dart';
 import 'package:unichat_mobile_app/features/settings/legal_webview_sheet.dart';
 import 'package:unichat_mobile_app/features/settings/presentation/widgets/notification_modes_card.dart';
-import 'package:unichat_mobile_app/features/sticky/sticky_overlay.dart';
 
 // Placeholder — swap for the real hosted URL once available.
 const _privacyPolicyUrl = 'https://teamzo.io/legal/privacy';
@@ -76,8 +75,6 @@ class SettingsPage extends ConsumerWidget {
           ),
 
           const SizedBox(height: 8),
-
-          _section('Appearance', [const _ThemeTile(), const _EdgeToEdgeTile(), const _StickyTile()]),
 
           _section('Notifications', [const _NotificationPermissionTile(), const _NotificationSection()]),
 
@@ -213,8 +210,8 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-class _ThemeTile extends ConsumerWidget {
-  const _ThemeTile();
+class ThemeTile extends ConsumerWidget {
+  const ThemeTile({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -262,13 +259,13 @@ class _ThemeTile extends ConsumerWidget {
 /// it's on. Rather than forcing one behavior for every device, this is a manual escape
 /// hatch: default on, and a user hitting that overlap issue on their specific phone can turn
 /// it off here. Takes effect immediately, no restart needed.
-class _EdgeToEdgeTile extends StatefulWidget {
-  const _EdgeToEdgeTile();
+class EdgeToEdgeTile extends StatefulWidget {
+  const EdgeToEdgeTile({super.key});
   @override
-  State<_EdgeToEdgeTile> createState() => _EdgeToEdgeTileState();
+  State<EdgeToEdgeTile> createState() => _EdgeToEdgeTileState();
 }
 
-class _EdgeToEdgeTileState extends State<_EdgeToEdgeTile> {
+class _EdgeToEdgeTileState extends State<EdgeToEdgeTile> {
   bool _enabled = LocalStorage.getBool(LocalStorage.kEdgeToEdge, defaultValue: true);
 
   @override
@@ -286,25 +283,6 @@ class _EdgeToEdgeTileState extends State<_EdgeToEdgeTile> {
       onChanged: (v) {
         setState(() => _enabled = v);
         SystemUiController.setEnabled(v);
-      },
-    );
-  }
-}
-
-/// Shows / hides the floating sticky-notes and to-do buttons on the Home page.
-class _StickyTile extends ConsumerWidget {
-  const _StickyTile();
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SwitchListTile(
-      secondary: const Icon(Icons.sticky_note_2_outlined, color: AppColors.textSecondary, size: 22),
-      title: const Text('Sticky notes & to-do button', style: TextStyle(fontSize: 14)),
-      subtitle: const Text('Show the floating notes and to-do buttons on the Home page.',
-          style: TextStyle(fontSize: 11.5, color: AppColors.textLight)),
-      value: ref.watch(stickyEnabledProvider),
-      activeThumbColor: AppColors.primary,
-      onChanged: (v) {
-        ref.read(stickyEnabledProvider.notifier).set(v);
       },
     );
   }

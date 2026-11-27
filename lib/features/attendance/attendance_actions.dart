@@ -52,7 +52,8 @@ enum PunchAsk {
 PunchAsk punchAsk(Map<String, dynamic> check) {
   if (check['radius_reason_needed'] == true) return PunchAsk.radiusReason;
   if (check['note_required'] == true) return PunchAsk.requiredNote;
-  if (check['note_optional'] == true) return PunchAsk.optionalNote;
+  // note_optional (late reason = Optional) is NOT asked here any more: the clock-in goes straight through and the reason is added from the
+  // Attendance card afterwards (see AttendanceStatusCard), so there is no skip step in the punch flow.
   return PunchAsk.nothing;
 }
 
@@ -233,7 +234,7 @@ Future<bool> attendanceAction(
   final radiusNeeded = ask == PunchAsk.radiusReason;
   final noteNeeded = check['note_required'] == true;
   // company setting "Late clock-in reason = Optional": ask, but the person may skip
-  final noteOptional = check['note_optional'] == true;
+  const noteOptional = false;
 
   // One modal for everything the punch still has to ask — the radius alert and/or the reason. When there is nothing to ask (on
   // time, inside the radius, or the late-reason setting is off) there is NO sheet and no empty note box: it submits straight away.
@@ -537,7 +538,6 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
     final c = widget.check;
     final radiusNeeded = c['radius_reason_needed'] == true;
     final noteNeeded = c['note_required'] == true;
-    final noteOptional = c['note_optional'] == true;
     final required = radiusNeeded || noteNeeded;
 
     return Padding(
@@ -604,11 +604,6 @@ class _PunchReviewSheetState extends State<_PunchReviewSheet> {
               Text(humanizeMinutes('${c['note_message'] ?? 'A reason is required.'}'),
                   key: const ValueKey('note-message'),
                   style: TextStyle(fontSize: 13, color: AppPalette.danger)),
-            ] else if (noteOptional) ...[
-              const SizedBox(height: 10),
-              Text(humanizeMinutes('${c['note_message'] ?? 'You can add a reason (optional).'}'),
-                  key: const ValueKey('note-message'),
-                  style: TextStyle(fontSize: 13, color: Colors.orange.shade800)),
             ],
             const SizedBox(height: 12),
             TextField(

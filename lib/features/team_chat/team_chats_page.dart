@@ -209,7 +209,8 @@ class _TeamChatsPageState extends ConsumerState<TeamChatsPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
               child: Row(children: [
-                Expanded(child: GlassPill(icon: Icons.chat_bubble_rounded, label: 'New chat', filled: true, onTap: () => context.push('/team-chat/new'))),
+                // filled: true,
+                Expanded(child: GlassPill(icon: Icons.chat_bubble_rounded, label: 'New chat', onTap: () => context.push('/team-chat/new'))),
                 if (PermissionGuard.teamChatGroups) ...[
                   const SizedBox(width: 10),
                   Expanded(child: GlassPill(icon: Icons.group_add_rounded, label: 'New group', onTap: () => context.push('/team-chat/new-group'))),

@@ -1,9 +1,11 @@
+import 'package:unichat_mobile_app/core/constants/api_constants.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:unichat_mobile_app/core/theme/mockup_palette.dart';
+import 'package:unichat_mobile_app/core/widgets/app_avatar.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_actions.dart';
 import 'package:unichat_mobile_app/features/attendance/widgets/swipe_action_button.dart';
 import 'package:unichat_mobile_app/features/attendance/attendance_gate.dart';
@@ -25,19 +27,30 @@ class ClockInRequiredPage extends ConsumerWidget {
     final gate = ref.watch(attendanceGateProvider);
     final meAsync = ref.watch(hrAttendanceMeProvider);
     final settings = meAsync.maybeWhen(
-      data: (d) => (d['settings'] is Map)
-          ? (d['settings'] as Map).cast<String, dynamic>()
-          : <String, dynamic>{},
+      data:
+          (d) =>
+              (d['settings'] is Map)
+                  ? (d['settings'] as Map).cast<String, dynamic>()
+                  : <String, dynamic>{},
       orElse: () => <String, dynamic>{},
     );
     final today = meAsync.maybeWhen(
-      data: (d) => (d['today'] is Map) ? (d['today'] as Map).cast<String, dynamic>() : null,
+      data:
+          (d) =>
+              (d['today'] is Map)
+                  ? (d['today'] as Map).cast<String, dynamic>()
+                  : null,
       orElse: () => null,
     );
     final openBreak = meAsync.maybeWhen(
-      data: (d) => (d['open_break'] is Map) ? (d['open_break'] as Map).cast<String, dynamic>() : null,
+      data:
+          (d) =>
+              (d['open_break'] is Map)
+                  ? (d['open_break'] as Map).cast<String, dynamic>()
+                  : null,
       orElse: () => null,
     );
+    final user = ref.watch(authProvider).value;
     final from = GoRouterState.of(context).uri.queryParameters['from'];
 
     if (!gate.loaded) {
@@ -73,34 +86,54 @@ class ClockInRequiredPage extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 84,
-                    height: 84,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      onBreak
-                          ? Icons.free_breakfast_rounded
-                          : Icons.work_history_rounded,
-                      size: 40,
-                      color: theme.colorScheme.primary,
-                    ),
+                  // Who is using this device — greeting, photo, name, phone and a daily quote.
+                  _WelcomeCard(
+                    name: user?.name ?? '',
+                    phone: user?.phone ?? '',
+                    avatar: resolveStorageUrl(user?.avatar),
+                    onBreak: onBreak,
                   ),
-                  const SizedBox(height: 22),
-                  Text(
-                    onBreak ? "You're on a break" : 'Start your day',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Container(
+                        width: 84,
+                        height: 84,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.12,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          onBreak
+                              ? Icons.free_breakfast_rounded
+                              : Icons.work_history_rounded,
+                          size: 40,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      const SizedBox(height: 22),
+                      Text(
+                        onBreak ? "You're on a break" : 'Start your day',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
+
                   const SizedBox(height: 4),
                   Text(
                     _dateLabel(today),
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: context.mutedColor, fontSize: 13, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      color: context.mutedColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -125,18 +158,29 @@ class ClockInRequiredPage extends ConsumerWidget {
                     maintainState: true,
                     maintainAnimation: true,
                     maintainSize: false,
-                    child: _BreakInfoCard(startAt: (openBreak?['start_at'] as String?) ?? ''),
+                    child: _BreakInfoCard(
+                      startAt: (openBreak?['start_at'] as String?) ?? '',
+                    ),
                   ),
                   const SizedBox(height: 28),
                   SizedBox(
                     width: double.infinity,
                     child: SwipeActionButton(
                       label: onBreak ? 'End break' : 'Clock in',
-                      icon: onBreak ? Icons.play_arrow_rounded : Icons.login_rounded,
+                      icon:
+                          onBreak
+                              ? Icons.play_arrow_rounded
+                              : Icons.login_rounded,
                       color: Theme.of(context).colorScheme.primary,
                       height: 54,
-                      onSwipe: () => _act(context, ref,
-                          onBreak: onBreak, from: from, settings: settings),
+                      onSwipe:
+                          () => _act(
+                            context,
+                            ref,
+                            onBreak: onBreak,
+                            from: from,
+                            settings: settings,
+                          ),
                     ),
                   ),
                   if (!onBreak) ...[
@@ -162,7 +206,9 @@ class ClockInRequiredPage extends ConsumerWidget {
                       )) {
                         return;
                       }
-                      await ref.read(authProvider.notifier).logout(clearAppLock: true);
+                      await ref
+                          .read(authProvider.notifier)
+                          .logout(clearAppLock: true);
                     },
                     child: const Text('Sign out instead'),
                   ),
@@ -235,7 +281,8 @@ class _BreakInfoCardState extends State<_BreakInfoCard> {
   void _tick() {
     if (_start == null) return;
     final elapsed = DateTime.now().difference(_start!);
-    if (mounted) setState(() => _elapsed = elapsed.isNegative ? Duration.zero : elapsed);
+    if (mounted)
+      setState(() => _elapsed = elapsed.isNegative ? Duration.zero : elapsed);
   }
 
   @override
@@ -274,20 +321,227 @@ class _BreakInfoCardState extends State<_BreakInfoCard> {
         children: [
           Column(
             children: [
-              Text('Break in', style: TextStyle(fontSize: 11, color: M.amberMuted, fontWeight: FontWeight.w600)),
+              Text(
+                'Break in',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: M.amberMuted,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(time12(widget.startAt),
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: M.amberTitle)),
+              Text(
+                time12(widget.startAt),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: M.amberTitle,
+                ),
+              ),
             ],
           ),
-          Container(width: 1, height: 32, color: M.amberMuted.withValues(alpha: 0.25)),
+          Container(
+            width: 1,
+            height: 32,
+            color: M.amberMuted.withValues(alpha: 0.25),
+          ),
           Column(
             children: [
-              Text('Total time', style: TextStyle(fontSize: 11, color: M.amberMuted, fontWeight: FontWeight.w600)),
+              Text(
+                'Total time',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: M.amberMuted,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(_hms(_elapsed),
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: M.amberTitle)),
+              Text(
+                _hms(_elapsed),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: M.amberTitle,
+                ),
+              ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Greeting for the current hour, plus an emoji to match.
+({String text, String emoji}) _greeting(bool onBreak) {
+  if (onBreak) return (text: 'Welcome back', emoji: '👋');
+  final h = DateTime.now().hour;
+  if (h < 12) return (text: 'Good morning', emoji: '🌅');
+  if (h < 17) return (text: 'Good afternoon', emoji: '☀️');
+  return (text: 'Good evening', emoji: '🌙');
+}
+
+const _quotes = <String>[
+  'The secret of getting ahead is getting started.',
+  'Small steps every day lead to big results.',
+  'Today is a new chance to do your best work.',
+  'Great things never come from comfort zones.',
+  'Dream big. Start small. Act now.',
+  'Success is the sum of small efforts repeated daily.',
+  'Your only limit is you. Make today count!',
+  'Discipline is choosing what you want most over what you want now.',
+  'Believe you can, and you are halfway there.',
+  'Make today so good that yesterday gets jealous.',
+];
+
+/// Same quote all day (changes tomorrow).
+String _quoteOfTheDay() {
+  final d = DateTime.now();
+  return _quotes[(d.year * 366 + d.month * 31 + d.day) % _quotes.length];
+}
+
+class _WelcomeCard extends StatelessWidget {
+  const _WelcomeCard({
+    required this.name,
+    required this.phone,
+    required this.avatar,
+    required this.onBreak,
+  });
+  final String name;
+  final String phone;
+  final String? avatar;
+  final bool onBreak;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+    final g = _greeting(onBreak);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: primary.withValues(alpha: 0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: primary.withValues(alpha: 0.10),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Greeting strip
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            color: primary.withValues(alpha: 0.10),
+            child: Text(
+              '${g.emoji}  ${g.text}!',
+              style: TextStyle(
+                color: primary,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    // Photo with ring
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: primary, width: 2.5),
+                      ),
+                      child: AppAvatar(name: name, imageUrl: avatar, size: 76),
+                    ),
+                    const SizedBox(width: 5),
+                    Column(
+                      children: [
+                        const SizedBox(height: 12),
+                        Text(
+                          name,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.phone_iphone_rounded,
+                                size: 14,
+                                color: primary,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                phone,
+                                style: TextStyle(
+                                  color: primary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+                // Quote with accent bar
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        width: 4,
+                        decoration: BoxDecoration(
+                          color: primary,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '“${_quoteOfTheDay()}”',
+                          style: TextStyle(
+                            color: context.mutedColor,
+                            fontSize: 13,
+                            height: 1.45,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
